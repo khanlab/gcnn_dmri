@@ -1,6 +1,7 @@
 import gPyTorch
 from torch.nn.modules.module import Module
 import dihedral12 as d12
+import numpy as np
 
 class Net(Module):
     def __init__(self):
@@ -25,6 +26,13 @@ weights_conv1_e=d12.apply_weight_basis(net.conv1.weight, net.conv1.basis_e_h)
 weights_conv2_e=d12.apply_weight_basis(net.conv2.weight, net.conv2.basis_e_h,net.conv2.basis_e_t)
 
 
+h = 5 * (H + 1)
+w = H + 1
+
+I, J, T = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
+I_out, J_out, T_out = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
+
+I_out, J_out, T_out=d12.padding_basis(4)
 
 
 

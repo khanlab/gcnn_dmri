@@ -7,8 +7,6 @@ def unproject(weights):
     :param weights in 1d configuration with shape [7,N], center weight at end
     :return: [3,3,N] weights
     """
-
-    #expected input shape is [N,7]
     N=weights.shape[-1]
     kernel=torch.zeros([3,3,N],requires_grad=False)
     for i in range(0,N):
@@ -158,8 +156,8 @@ def padding_basis(H):
     h = 5 * (H + 1)
     w = H + 1
 
-    I, J,T = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
-    I_out, J_out,T_out = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
+    I, J, T = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
+    I_out, J_out, T_out = np.meshgrid(np.arange(0, h), np.arange(0, w),np.arange(0, 12), indexing='ij')
 
     for t in range(0,12):
         if t<=5:
@@ -265,6 +263,13 @@ def basis_expansion(deep):
         return basis.type(torch.long), basis_t.type(torch.long)
 
 def apply_weight_basis(weights,basis,basis_t=None):
+    """
+    Returns expanded weights, i.e., expanded basis applied to the weights
+    :param weights: weights
+    :param basis: weights for first layer
+    :param basis_t: weights for deep layer
+    :return: expanded weights
+    """
     Cout=weights.shape[0]
     Cin=weights.shape[1]
     if basis_t is None:
@@ -278,7 +283,7 @@ def apply_weight_basis(weights,basis,basis_t=None):
 def xy2ind(H,c,x,y):
     """
     We define a local x,y basis for each chart which are stacked so that the height (rows) of the stacked image point
-    along the y direction of each basis. This function converts between each chart's, c, coordinates, x,y to stacked
+    along the y direction of each basis. This function converts between each chart, c, coordinates, x,y to stacked
     image inds. We take increasing y to be the same as increasing i, so care must be taken when visualizing these
     images.
     :param H: width of image is H+1, height is 5*(H+1)
