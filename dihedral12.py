@@ -1,6 +1,11 @@
 import numpy as np
 import torch
 
+
+"""
+Some useful functions for the dihedral group
+"""
+
 def unproject(weights):
     """
     Goes from 1d configuration to 3x3 configuration

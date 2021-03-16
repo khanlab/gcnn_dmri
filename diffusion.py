@@ -48,6 +48,7 @@ class diffVolume():
         self.gtab = []
         self.mask=[]
         self.bvec_meshes=[]
+        self.ico_mesh=[]
 
 
     def getVolume(self, folder=None):
@@ -99,15 +100,62 @@ class diffVolume():
 
     def makeBvecMeshes(self):
         """
-        Makes bvec meshes for each shell > 0
+        Makes bvec meshes for each shell > 0. Note that each shell will have double the amount of bvec directions
+        because of antipodal symmetrization.
         :return: Fills out self.bvec_meshes
         """
-        n_shells=len(self.inds)
+        n_shells=len(self.inds) #this includes the S_0 "shell"
         for shell in range(1,n_shells):
             x = self.bvecs_sorted[shell][:, 0]
             y = self.bvecs_sorted[shell][:, 1]
             z = self.bvecs_sorted[shell][:, 2]
-            lons, lats = xyz2lonlat(x,y,z)
+            plons, plats = xyz2lonlat(x,y,z)
+            nlons, nlats = xyz2lonlat(-x,-y,-z)
+            lons = np.concatenate((plons,nlons),0)
+            lats = np.concatenate((plats, plats), 0)
             self.bvec_meshes.append(sTriangulation(lons,lats,tree=True))
+
+    def makeFlat(self,p_list,ico_mesh):
+        """
+        This function returns the diffusion signal at voxels in p_list as a flat array to be passed to the network
+        :param p_list: List of voxels
+        :param ico_mesh: Initiated (mesh made, etc.) instance of icomesh class
+        :return: Flat array
+        """
+
+        n_shells = len(self.inds) #this includes the S_0 "shell"
+        for pid,p in enumerate(p_list): #have to cycle through all points in p_list
+            for sid in range(1,n_shells): #go through each shell also
+                location=[]
+                location.extend(p)
+                location.append(self.inds[sid])
+                location=tuple(location)
+                S=self.vol.get_fdata[location]
+                Stwice=np.concatenate([S,S],0)
+                #TODO once the "interpolation mesh" is ready in the icomesh class, use that and bvec_meshes to put
+                # data onto that mesh. From there use face_list,i_list and j_list and some systemic indexing to move
+                # data to 2D x n_shells size array. From this point you need to pad overlapping indices and THEN pad
+                # overlapping charts (this is different from former). At this stage the arrays should be ready for
+                # training.
+                #self.bvec_meshes[sid-1].interpolate(icomesh.)
+
+
+
+
+diff=diffVolume()
+diff.getVolume("/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion")
+diff.shells()
+diff.makeBvecMeshes()
+
+
+
+
+
+
+
+
+
+
+
 
 
