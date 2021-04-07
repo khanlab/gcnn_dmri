@@ -4,6 +4,11 @@ from dipy.core.gradients import gradient_table
 import numpy as np
 from stripy import sTriangulation
 from stripy.spherical import xyz2lonlat
+from icosahedron import icomesh
+from dihedral12 import xy2ind
+from scipy.spatial import KDTree
+
+
 
 class dti():
     """
@@ -42,6 +47,7 @@ class diffVolume():
         self.vol = []
         self.bvals = []
         self.bvecs = []
+        self.bvecs_kd=[]
         self.bvals_sorted=[]
         self.bvecs_sorted=[]
         self.inds=[]
@@ -49,6 +55,7 @@ class diffVolume():
         self.mask=[]
         self.bvec_meshes=[]
         self.ico_mesh=[]
+        self.interpolation_matrices=[]
 
 
     def getVolume(self, folder=None):
@@ -109,11 +116,25 @@ class diffVolume():
             x = self.bvecs_sorted[shell][:, 0]
             y = self.bvecs_sorted[shell][:, 1]
             z = self.bvecs_sorted[shell][:, 2]
-            plons, plats = xyz2lonlat(x,y,z)
-            nlons, nlats = xyz2lonlat(-x,-y,-z)
-            lons = np.concatenate((plons,nlons),0)
-            lats = np.concatenate((plats, plats), 0)
+            lons, lats = xyz2lonlat(x,y,z)
+
+            #nlons, nlats = xyz2lonlat(-x,-y,-z)
+            #lons = np.concatenate((plons,nlons),0)
+            #lats = np.concatenate((plats, nlats), 0)
             self.bvec_meshes.append(sTriangulation(lons,lats,tree=True))
+
+    def makeInverseDistInterpMatrix(self,ico_mesh):
+        N_ico=len(ico_mesh.lons)
+        for bvec_mesh in self.bvec_meshes:
+            N_bvec=len(bvec_mesh.lons)
+            interp_matrix = np.zeros([N_ico, N_bvec])
+            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=3)
+            weights=1/dist
+            for row in range(0,N_ico):
+                norm=sum(weights[row])
+                interp_matrix[row,idx[row]]=weights[row]/norm
+            self.interpolation_matrices.append(interp_matrix)
+
 
     def makeFlat(self,p_list,ico_mesh):
         """
@@ -124,28 +145,78 @@ class diffVolume():
         """
 
         n_shells = len(self.inds) #this includes the S_0 "shell"
+        ico_signal=[]
+        flat=[]
+        S0=[]
         for pid,p in enumerate(p_list): #have to cycle through all points in p_list
-            for sid in range(1,n_shells): #go through each shell also
+            ico_signal_per_shell=[]
+            flat_per_shell=[]
+            for sid in range(0,n_shells): #go through each shell also
                 location=[]
                 location.extend(p)
                 location.append(self.inds[sid])
                 location=tuple(location)
-                S=self.vol.get_fdata[location]
-                Stwice=np.concatenate([S,S],0)
-                #TODO once the "interpolation mesh" is ready in the icomesh class, use that and bvec_meshes to put
-                # data onto that mesh. From there use face_list,i_list and j_list and some systemic indexing to move
-                # data to 2D x n_shells size array. From this point you need to pad overlapping indices and THEN pad
-                # overlapping charts (this is different from former). At this stage the arrays should be ready for
-                # training.
-                #self.bvec_meshes[sid-1].interpolate(icomesh.)
+                S=self.vol.get_fdata()[location]
+                if sid==0:
+                    S0.append(S)
+                    continue
+                Stwice=S#np.concatenate([S,S],0) #insteal of symmterizing the signal lets symmterize by average on
+                # the icosahedron
+                ico_lons=ico_mesh.interpolation_mesh.lons
+                ico_lats = ico_mesh.interpolation_mesh.lats
+                temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,zdata=Stwice) #stripy interp
+                #temp=np.matmul(self.interpolation_matrices[sid-1],Stwice) #inverse distance interp
+                new_temp=np.zeros(len(temp))
+                for t in range(0,len(temp)):
+                    S1=temp[t]
+                    S2=temp[int(ico_mesh.antipodals[t])]
+                    new_temp[t]=(0.5*(S1+S2))
+                ico_signal_per_shell.append(new_temp)
+                flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[0],ico_mesh))
+            if ico_signal_per_shell is not None:
+                ico_signal.append(ico_signal_per_shell)
+                flat.append(flat_per_shell)
+        return S0, flat, ico_signal
+
+    def sphere_to_flat(self,ico_signal,ico_mesh):
+        H=ico_mesh.m+1
+        w=5*(H+1)
+        h=H+1
+        flat=np.zeros([h,w])
+        top_faces=[[1,2],[5,6],[9,10],[13,14],[17,18]]
+        for c in range(0,5):
+            face=top_faces[c]
+            for top_bottom in face:
+                signal_inds = ico_mesh.interpolation_inds[top_bottom]
+                signal=ico_signal[signal_inds]
+                i=ico_mesh.i_list[top_bottom]
+                j=ico_mesh.j_list[top_bottom]
+                i=np.asarray(i).astype(int)
+                j=np.asarray(c*h+j+1).astype(int)
+                flat[i,j]=signal
+        strip_xy = np.arange(0, H - 1)
+        #print(strip)
+        for c in range(0,5): #for padding
+            #col=(c+1)%5*h+1
+            #flat[0,c*h+strip]=flat[strip-1,col]
+            flat[0,c*h+1]=ico_signal[0] #northpole
+
+            c_left = c
+            x_left = -1
+            y_left = strip_xy
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+            # print(i_left,j_left)
+
+            c_right = (c - 1) % 5
+            x_right = H - 2 - strip_xy
+            y_right = H - 2
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+
+            flat[i_left,j_left]=flat[i_right,j_right]
 
 
 
-
-diff=diffVolume()
-diff.getVolume("/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion")
-diff.shells()
-diff.makeBvecMeshes()
+        return flat
 
 
 
