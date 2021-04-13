@@ -7,6 +7,7 @@ from stripy.spherical import xyz2lonlat
 from icosahedron import icomesh
 from dihedral12 import xy2ind
 from scipy.spatial import KDTree
+import dipy
 
 
 
@@ -105,6 +106,10 @@ class diffVolume():
         self.inds=temp_inds
         self.inds=np.asarray(self.inds)
 
+        #make the kdtree for each shell
+        for bvecs in self.bvecs_sorted:
+            self.bvecs_kd.append(KDTree(bvecs,10))
+
     def makeBvecMeshes(self):
         """
         Makes bvec meshes for each shell > 0. Note that each shell will have double the amount of bvec directions
@@ -124,17 +129,44 @@ class diffVolume():
             self.bvec_meshes.append(sTriangulation(lons,lats,tree=True))
 
     def makeInverseDistInterpMatrix(self,ico_mesh):
+        #this is with stripy
         N_ico=len(ico_mesh.lons)
         for bvec_mesh in self.bvec_meshes:
             N_bvec=len(bvec_mesh.lons)
             interp_matrix = np.zeros([N_ico, N_bvec])
-            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=3)
+            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=10)
             weights=1/dist
             for row in range(0,N_ico):
                 norm=sum(weights[row])
                 interp_matrix[row,idx[row]]=weights[row]/norm
             self.interpolation_matrices.append(interp_matrix)
 
+        #this is just the usual stuff
+        #make two matrices Aup and Adwn
+        # N_ico = len(ico_mesh.x)
+        # x = ico_mesh.x
+        # y = ico_mesh.y
+        # z = ico_mesh.z
+        # xyz=np.array([x,y,z]).T
+        # for shell,bvec_mesh in enumerate(self.bvec_meshes):
+        #     N_bvec=len(bvec_mesh.x)
+        #     interp_matrix=np.zeros([N_ico,N_bvec])
+        #     dist,idx=self.bvecs_kd[shell+1].query(xyz,k=10)
+        #     weights=1/(dist)
+        #     for row in range(0,N_ico):
+        #         norm=sum(weights[row])
+        #         interp_matrix[row,idx[row]]=weights[row]/norm
+        #     self.interpolation_matrices.append(interp_matrix)
+
+    def inverseDistanceInterp(self,r,kd,signal):
+        dist, inds = kd.query(r, 10)
+        print("r",r)
+        print("dist", dist)
+        print("inds", inds)
+        sigs = signal[inds]
+        dist = 1 / dist
+        norm = sum(dist)
+        return sum(dist * sigs) / norm
 
     def makeFlat(self,p_list,ico_mesh):
         """
@@ -149,8 +181,10 @@ class diffVolume():
         flat=[]
         S0=[]
         for pid,p in enumerate(p_list): #have to cycle through all points in p_list
+            #print(pid)
             ico_signal_per_shell=[]
             flat_per_shell=[]
+            S0_per_point=[]
             for sid in range(0,n_shells): #go through each shell also
                 location=[]
                 location.extend(p)
@@ -158,24 +192,43 @@ class diffVolume():
                 location=tuple(location)
                 S=self.vol.get_fdata()[location]
                 if sid==0:
-                    S0.append(S)
+                    S0_per_point.append(S)
                     continue
                 Stwice=S#np.concatenate([S,S],0) #insteal of symmterizing the signal lets symmterize by average on
                 # the icosahedron
+                #Stwice=self.bvec_meshes[sid-1].smoothing(S,np.ones_like(S),1e-4,0.1,0.01)[0]
                 ico_lons=ico_mesh.interpolation_mesh.lons
                 ico_lats = ico_mesh.interpolation_mesh.lats
-                temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,zdata=Stwice) #stripy interp
-                #temp=np.matmul(self.interpolation_matrices[sid-1],Stwice) #inverse distance interp
-                new_temp=np.zeros(len(temp))
-                for t in range(0,len(temp)):
+                temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
+                #stripy interp
+                #print(S0)
+                #print(np.mean(S0))
+                #temp=np.matmul(self.interpolation_matrices[sid-1],Stwice/np.mean(S0_per_point)) #inverse distance
+                # interp
+                #temp=ico_lats
+                new_temp=np.zeros(len(ico_lats))
+                for t in range(0,len(ico_lats)):
                     S1=temp[t]
                     S2=temp[int(ico_mesh.antipodals[t])]
+                    # xx= ico_mesh.interpolation_mesh.x[t]
+                    # yy = ico_mesh.interpolation_mesh.y[t]
+                    # zz = ico_mesh.interpolation_mesh.z[t]
+                    # norm=np.sqrt(xx*xx+yy*yy+zz*zz)
+                    # S1=self.inverseDistanceInterp([xx/norm,yy/norm,zz/norm],self.bvecs_kd[sid],Stwice/np.mean(S0_per_point))
+                    # xx=  ico_mesh.interpolation_mesh.x[int(ico_mesh.antipodals[t])]
+                    # yy = ico_mesh.interpolation_mesh.y[int(ico_mesh.antipodals[t])]
+                    # zz = ico_mesh.interpolation_mesh.z[int(ico_mesh.antipodals[t])]
+                    # norm = np.sqrt(xx * xx + yy * yy + zz * zz)
+                    # S2=self.inverseDistanceInterp([xx/norm,yy/norm,zz/norm],self.bvecs_kd[sid],Stwice/np.mean(S0_per_point))
                     new_temp[t]=(0.5*(S1+S2))
                 ico_signal_per_shell.append(new_temp)
-                flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[0],ico_mesh))
-            if ico_signal_per_shell is not None:
-                ico_signal.append(ico_signal_per_shell)
-                flat.append(flat_per_shell)
+                #flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[sid],ico_mesh))
+                flat_per_shell.append(self.sphere_to_flat(new_temp, ico_mesh))
+            #if ico_signal_per_shell is not None:
+            ico_signal.append(ico_signal_per_shell)
+            flat.append(flat_per_shell)
+        S0.append(S0_per_point)
+
         return S0, flat, ico_signal
 
     def sphere_to_flat(self,ico_signal,ico_mesh):

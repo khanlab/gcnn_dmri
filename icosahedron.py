@@ -6,6 +6,7 @@ from anti_lib import Vec
 from stripy.spherical import xyz2lonlat
 import matplotlib.cm as cm
 import matplotlib as mpl
+from dipy.core.sphere import (sphere2cart, cart2sphere)
 
 
 class icomesh:
@@ -26,6 +27,7 @@ class icomesh:
         self.interpolation_inds=[]
         self.interpolation_mesh=[]
         self.antipodals=[]
+
 
 
     def get_icomesh(self):
