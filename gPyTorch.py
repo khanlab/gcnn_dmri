@@ -2,7 +2,7 @@ from torch.nn.modules.module import Module
 import dihedral12 as d12
 from torch.nn.parameter import Parameter
 from torch import Tensor
-from torch.nn import init
+from torch.nn import init, GroupNorm, ModuleList
 from torch.nn import functional as F
 import torch
 import math
@@ -85,3 +85,36 @@ class opool(Module):
         for b in range(0, batch_size):
             input_pool[b, :, :, :] = input[b, subs[0, b, :], :, :].clone()
         return input_pool.cuda()
+
+class gConv_gNorm_Relu(Module):
+    """
+    This class combines the gConv and gNorm layers with reLU activaition
+    """
+    def __init__(self,Cin,Cout,H,shells=None):
+        super(gConv_gNorm_Relu, self).__init__()
+        self.conv = gConv2d(Cin, Cout, H, shells=shells)
+        self.gn = GroupNorm(Cout, Cout * 12)
+
+    def forward(self, x):
+        x = F.relu(self.conv(x))
+        x = self.gn(x)
+        return x
+
+class gNetFromList(Module):
+    """
+    This class will give us a gConv network from a list of filters
+    """
+    def __init__(self,H,filterlist,shells):
+        super(gNetFromList, self).__init__()
+        self.gConvs=[]
+        for i in range(0,len(filterlist)-1):
+            if i ==0:
+                self.gConvs = [gConv_gNorm_Relu(filterlist[i], filterlist[i+1], H, shells=shells)]  # this is the initilization
+            else:
+                self.gConvs.append(gConv_gNorm_Relu(filterlist[i],filterlist[i+1],H))
+        self.gConvs=ModuleList(self.gConvs)
+
+    def forward(self,x):
+        for gConv in self.gConvs:
+            x=gConv(x)
+        return x
