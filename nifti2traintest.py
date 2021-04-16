@@ -12,7 +12,7 @@ from nibabel import load
 Functions that allow us to load training and test data from nifti files
 """
 
-def load(basepath,N_train,N_test,N_valid):
+def load(datapath,dtipath,N_train,N_test,N_valid,interp='inverse_distance'):
     """
     :param path: path of diffusion and dti data
     :param N_train: Number of training voxels
@@ -52,22 +52,19 @@ def load(basepath,N_train,N_test,N_valid):
 
     # load diffusion data
     diff = diffusion.diffVolume()
-    diff.getVolume(basepath)
+    diff.getVolume(datapath)
     diff.shells()
     diff.makeBvecMeshes()
 
     # get the dti data
     dti = diffusion.dti()
-    dti.load(pathprefix=basepath + '/dti')
+    dti.load(pathprefix=dtipath)
 
     # get the icosahedron ready
     ico = icosahedron.icomesh(m=4)
     ico.get_icomesh()
     ico.vertices_to_matrix()
     diff.makeInverseDistInterpMatrix(ico.interpolation_mesh)
-
-    # mask is available in diff but whatever
-    #mask = load(basepath + "/nodif_brain_mask.nii.gz")
 
     # these are all the voxels
     i, j, k = np.where(diff.mask.get_fdata() == 1)
@@ -96,9 +93,9 @@ def load(basepath,N_train,N_test,N_valid):
     valid_voxels = np.asarray([i[valid_inds], j[valid_inds], k[valid_inds]]).T
 
     # this is for X_train and X_test
-    S0_train, flat_train, signal_train = diff.makeFlat(train_voxels, ico)
-    S0_test, flat_test, signal_test = diff.makeFlat(test_voxels, ico)
-    S0_valid, flat_valid, signal_valid = diff.makeFlat(valid_voxels, ico)
+    S0_train, flat_train, signal_train = diff.makeFlat(train_voxels, ico,interp=interp)
+    S0_test, flat_test, signal_test = diff.makeFlat(test_voxels, ico,interp=interp)
+    S0_valid, flat_valid, signal_valid = diff.makeFlat(valid_voxels, ico,interp=interp)
 
     I, J, T = d12.padding_basis(ico.m + 1)
 

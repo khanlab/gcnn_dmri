@@ -168,11 +168,12 @@ class diffVolume():
         norm = sum(dist)
         return sum(dist * sigs) / norm
 
-    def makeFlat(self,p_list,ico_mesh):
+    def makeFlat(self,p_list,ico_mesh,interp='inverse_distance'):
         """
         This function returns the diffusion signal at voxels in p_list as a flat array to be passed to the network
         :param p_list: List of voxels
         :param ico_mesh: Initiated (mesh made, etc.) instance of icomesh class
+        :param interp: Type of interpolation used ('nearest','linear','cubic','inverse_distance')
         :return: Flat array
         """
 
@@ -199,27 +200,19 @@ class diffVolume():
                 #Stwice=self.bvec_meshes[sid-1].smoothing(S,np.ones_like(S),1e-4,0.1,0.01)[0]
                 ico_lons=ico_mesh.interpolation_mesh.lons
                 ico_lats = ico_mesh.interpolation_mesh.lats
-                temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
+                #temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
                 #stripy interp
                 #print(S0)
                 #print(np.mean(S0))
-                #temp=np.matmul(self.interpolation_matrices[sid-1],Stwice/np.mean(S0_per_point)) #inverse distance
-                # interp
-                #temp=ico_lats
+                if interp =='nearest': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,zdata=Stwice/np.mean(S0_per_point))
+                if interp =='linear': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
+                if interp =='cubic': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=3,zdata=Stwice/np.mean(S0_per_point))
+                if interp =='inverse_distance': temp=np.matmul(self.interpolation_matrices[sid-1],Stwice/np.mean(S0_per_point)) #inverse distance
+                
                 new_temp=np.zeros(len(ico_lats))
                 for t in range(0,len(ico_lats)):
                     S1=temp[t]
                     S2=temp[int(ico_mesh.antipodals[t])]
-                    # xx= ico_mesh.interpolation_mesh.x[t]
-                    # yy = ico_mesh.interpolation_mesh.y[t]
-                    # zz = ico_mesh.interpolation_mesh.z[t]
-                    # norm=np.sqrt(xx*xx+yy*yy+zz*zz)
-                    # S1=self.inverseDistanceInterp([xx/norm,yy/norm,zz/norm],self.bvecs_kd[sid],Stwice/np.mean(S0_per_point))
-                    # xx=  ico_mesh.interpolation_mesh.x[int(ico_mesh.antipodals[t])]
-                    # yy = ico_mesh.interpolation_mesh.y[int(ico_mesh.antipodals[t])]
-                    # zz = ico_mesh.interpolation_mesh.z[int(ico_mesh.antipodals[t])]
-                    # norm = np.sqrt(xx * xx + yy * yy + zz * zz)
-                    # S2=self.inverseDistanceInterp([xx/norm,yy/norm,zz/norm],self.bvecs_kd[sid],Stwice/np.mean(S0_per_point))
                     new_temp[t]=(0.5*(S1+S2))
                 ico_signal_per_shell.append(new_temp)
                 #flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[sid],ico_mesh))

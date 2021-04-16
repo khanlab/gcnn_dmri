@@ -1,5 +1,5 @@
 import stripy
-from mayavi import mlab
+#from mayavi import mlab
 import numpy as np
 import geodesic
 from anti_lib import Vec
@@ -166,23 +166,23 @@ class icomesh:
             antipodals[i]=int(id[0][0])
         self.antipodals=antipodals
 
-    def plot_icosohedron(self,maxface=22):
-        """
-        A function that plots the icosahedron with i,j labels
-        :return: plot the icosahedron
-        """
-        colors=[[1,0,0],
-                [0,1,0],
-                [0,0,1],
-                [1,1,0],
-                [0,1,1]]
-        for f in range(0,maxface):
-            for p in range(0,len(self.face_list[f])):
-                pnt=self.face_list[f][p]
-                i = self.i_list[f][p]
-                j = self.j_list[f][p]
-                if np.isnan(i)==0 & np.isnan(i)==0:
-                    string= "%d, %d" % (i,j)
-                    mlab.text3d(pnt[0],pnt[1],pnt[2],string,scale=0.05)
-                    mlab.points3d(pnt[0],pnt[1],pnt[2],scale_factor=0.05)
+    # def plot_icosohedron(self,maxface=22):
+    #     """
+    #     A function that plots the icosahedron with i,j labels
+    #     :return: plot the icosahedron
+    #     """
+    #     colors=[[1,0,0],
+    #             [0,1,0],
+    #             [0,0,1],
+    #             [1,1,0],
+    #             [0,1,1]]
+    #     for f in range(0,maxface):
+    #         for p in range(0,len(self.face_list[f])):
+    #             pnt=self.face_list[f][p]
+    #             i = self.i_list[f][p]
+    #             j = self.j_list[f][p]
+    #             if np.isnan(i)==0 & np.isnan(i)==0:
+    #                 string= "%d, %d" % (i,j)
+    #                 mlab.text3d(pnt[0],pnt[1],pnt[2],string,scale=0.05)
+    #                 mlab.points3d(pnt[0],pnt[1],pnt[2],scale_factor=0.05)
 

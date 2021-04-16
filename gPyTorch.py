@@ -37,13 +37,15 @@ class gConv2d(Module):
         #initialize weight basis if not deep
         if self.deep==0:
             self.weight = Parameter(Tensor(out_channels, in_channels, self.kernel_size))
-            self.basis_e_h = d12.basis_expansion(self.deep) #this can be at net level also
+            self.basis_e_h = d12.basis_expansion(self.deep).detach() #this can be at net level also
             self.basis_e_t = None
 
         # initialize weight basis if deep
         elif self.deep == 1:  # and (in_channels % 12)==0:
             self.weight = Parameter(Tensor(out_channels, in_channels, 12, self.kernel_size))
             self.basis_e_h, self.basis_e_t = d12.basis_expansion(self.deep) #this can be at the net level also
+            self.basis_e_h=self.basis_e_h.detach()
+            self.basis_e_t=self.basis_e_t.detach()
 
         self.bias = Parameter(Tensor(out_channels))
         self.bias_basis = d12.bias_basis(out_channels)
@@ -59,8 +61,8 @@ class gConv2d(Module):
 
     def forward(self,input):
         #use the bases to expand the kernel and the bias
-        self.bias_e=self.bias[self.bias_basis]
-        self.kernel_e=d12.apply_weight_basis(self.weight,self.basis_e_h,self.basis_e_t)
+        self.bias_e=self.bias[self.bias_basis].detach()
+        self.kernel_e=d12.apply_weight_basis(self.weight,self.basis_e_h,self.basis_e_t).detach()
         out=F.conv2d(input.float(),self.kernel_e.float(),bias=self.bias_e.float())
         out=F.pad(out,(1,1,1,1))
         #return out
@@ -86,17 +88,21 @@ class opool(Module):
             input_pool[b, :, :, :] = input[b, subs[0, b, :], :, :].clone()
         return input_pool.cuda()
 
-class gConv_gNorm_Relu(Module):
+class gConv_gNorm(Module):
     """
     This class combines the gConv and gNorm layers with reLU activaition
     """
-    def __init__(self,Cin,Cout,H,shells=None):
-        super(gConv_gNorm_Relu, self).__init__()
+    def __init__(self,Cin,Cout,H,shells=None,activation=None):
+        super(gConv_gNorm, self).__init__()
+        self.activation=activation
         self.conv = gConv2d(Cin, Cout, H, shells=shells)
         self.gn = GroupNorm(Cout, Cout * 12)
 
     def forward(self, x):
-        x = F.relu(self.conv(x))
+        if self.activation != None:
+            x=self.activation(self.conv(x))
+        else:
+            x=self.conv(x)
         x = self.gn(x)
         return x
 
@@ -104,14 +110,16 @@ class gNetFromList(Module):
     """
     This class will give us a gConv network from a list of filters
     """
-    def __init__(self,H,filterlist,shells):
+    def __init__(self,H,filterlist,shells,activationlist=None):
         super(gNetFromList, self).__init__()
         self.gConvs=[]
+        if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
+            activationlist=[None for i in range(0,len(filterlist)-1)]
         for i in range(0,len(filterlist)-1):
             if i ==0:
-                self.gConvs = [gConv_gNorm_Relu(filterlist[i], filterlist[i+1], H, shells=shells)]  # this is the initilization
+                self.gConvs = [gConv_gNorm(filterlist[i], filterlist[i+1], H, shells=shells,activation=activationlist[i])]  # this is the initilization
             else:
-                self.gConvs.append(gConv_gNorm_Relu(filterlist[i],filterlist[i+1],H))
+                self.gConvs.append(gConv_gNorm(filterlist[i],filterlist[i+1],H,shells=shells,activation=activationlist[i]))
         self.gConvs=ModuleList(self.gConvs)
 
     def forward(self,x):
