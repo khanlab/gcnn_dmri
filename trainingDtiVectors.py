@@ -41,7 +41,7 @@ def Myloss(output, target):
 def convert2cuda(X_train,Y_train,start,end):
     X_train_p = np.copy(100/X_train)
     #X_train_p = np.copy(X_train)
-    Y_train_p =10000 * (np.copy(Y_train[:,start:end]))
+    Y_train_p = (np.copy(Y_train[:,start:end]))
     X_train_p[np.isinf(X_train_p)] = 0
 
     inputs = X_train_p
@@ -56,31 +56,39 @@ def convert2cuda(X_train,Y_train,start,end):
 
     return input,target
 
-N_train=1000
+N_train=2000
 N_test=400
 N_valid=500
-datapath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/100408/T1w/Diffusion"
-dtipath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/deriv/hcp1200_dtifit/results/sub-100408/dtifit"
+
+#datapath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/100408/T1w/Diffusion"
+#dtipath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/deriv/hcp1200_dtifit/results/sub-100408/dtifit"
+datapath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion"
+dtipath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/dti"
+
+
 Xtrain,Ytrain,Xtest,Ytest,Xvalid,Yvalid, ico,diff=ntt.load(datapath,dtipath,N_train,N_test,N_valid,interp='inverse_distance')
 
 #FA,L1,L2,L3,V1x,V1y,V1z,V2x,V2y,V2z,V3x,V3y,V3z
-input_train,target_train=convert2cuda(Xtrain,Ytrain,1,4)
-input_val,target_val=convert2cuda(Xvalid,Yvalid,1,4)
-input_test,target_test=convert2cuda(Xtest,Ytest,1,4)
+start=4
+end=7
+input_train,target_train=convert2cuda(Xtrain,Ytrain,4,7)
+input_val,target_val=convert2cuda(Xvalid,Yvalid,4,7)
+input_test,target_test=convert2cuda(Xtest,Ytest,4,7)
 
 H=ico.m+1
 h = 5 * (H + 1)
 w = H + 1
-gfilterlist=[3,32,16,8]
-gactivationlist=[None for i in range(0,len(gfilterlist)-1)]
+gfilterlist=[3,128,64,32,16,8,4]
+gactivationlist=[F.relu for i in range(0,len(gfilterlist)-1)]
 last=gfilterlist[-1]
-linfilterlist=[int(last * h * w / 4),3]
+linfilterlist=[int(last * h * w / 4),100,10,3,3]
+lactivationlist=[None for i in range(0,len(linfilterlist)-1)]
+lactivationlist[-1]=None
 
-
-net=training.net(linfilterlist,gfilterlist,3,H,gactivationlist=gactivationlist)
+net=training.net(linfilterlist,gfilterlist,3,H,gactivationlist=gactivationlist,lactivationlist=lactivationlist)
 
 net=net.cuda()
-training.train(net,input_train,target_train,input_val,target_val,nn.SmoothL1Loss(),1e-1,32,1,0.5,20,200)
+training.train(net,input_train,target_train,input_val,target_val,nn.SmoothL1Loss(),1e-4,8,1e-3,0.5,20,200)
 
 
 #
@@ -176,12 +184,16 @@ training.train(net,input_train,target_train,input_val,target_val,nn.SmoothL1Loss
 # filterlist = [3, 8, 16, 24, 32]
 # net=train(input_train,target_train,filterlist,1e-6,ico.m+1,350)
 #
-# test=net(input_test)
+test=net(input_test)
 # norm = test.norm(dim=-1)
 # norm = norm.view(-1, 1)
 # norm = norm.expand(norm.shape[0], 3)
-# test=test/norm
-#
-# dots=[]
-# for i in range(0,400):
-#     dots.append(abs(np.dot(test[i,:].cpu().detach(),Ytest[i,:])))
+plt.figure()
+plt.scatter(test.cpu().detach(),target_test.cpu().detach())
+plt.axis('equal')
+plt.savefig('test1.png')
+
+
+dots=[]
+for i in range(0,400):
+    dots.append(abs(np.dot(test[i,:].cpu().detach(),Ytest[i,:])))

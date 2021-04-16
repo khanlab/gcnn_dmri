@@ -32,7 +32,7 @@ class lNetFromList(Module):
     """
     def __init__(self,filterlist,activationlist=None):
         super(lNetFromList,self).__init__()
-        self.activationlist=[]
+        self.activationlist=activationlist
         self.lins=[]
         if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
             self.activationlist=[None for i in range(0,len(filterlist)-1)]
@@ -56,8 +56,8 @@ def get_accuracy(net,input_val,target_val):
     norm = norm.view(-1, 1)
     norm = norm.expand(norm.shape[0], 3)
     x = x / norm
-    accuracy = x - target_val
-    #accuracy = torch.rad2deg(torch.arccos( accuracy.sum(dim=-1).abs()))
+    accuracy = x * target_val
+    accuracy = torch.rad2deg( torch.arccos( accuracy.sum(dim=-1).abs()))
     return accuracy.mean().detach().cpu()
 
 class net(Module):
