@@ -91,9 +91,7 @@ class net(Module):
 
         return x
 
-def train(net,input,target,input_val,target_val, loss,lr,batch_size,H,factor,patience,Nepochs):
-
-
+def train(net,input,target,input_val,target_val, loss,lr,batch_size,factor,patience,Nepochs,lossname=None,netname=None):
 
     criterion = loss
     optimizer = optim.Adamax(net.parameters(), lr=lr)  # , weight_decay=0.001)
@@ -129,6 +127,7 @@ def train(net,input,target,input_val,target_val, loss,lr,batch_size,H,factor,pat
             print(running_loss / len(trainloader))
             loss_list.append(running_loss / len(trainloader))
             epochs_list.append(epoch)
+            #print(output[0])
             if np.isnan(running_loss / len(trainloader)) == 1:
                 break
 
@@ -137,17 +136,20 @@ def train(net,input,target,input_val,target_val, loss,lr,batch_size,H,factor,pat
         if (epoch % 10)==9:
             fig_err, ax_err = plt.subplots()
             ax_err.plot(epochs_list,np.log10(loss_list))
-            plt.savefig('./loss2.png')
+            if lossname is None:
+                lossname='loss.png'
+            plt.savefig(lossname)
             plt.close(fig_err)
-
-            accuracy=get_accuracy(net,input_val,target_val)
-            acc_list.append(accuracy)
-            epoch_acc_list.append(epoch)
-            fig_acc, ax_acc = plt.subplots()
-            ax_acc.plot(epoch_acc_list,acc_list)
-            plt.savefig('./accuracy2.png')
-            plt.close(fig_acc)
-            torch.save(net.state_dict(), './net2')
+            # accuracy=get_accuracy(net,input_val,target_val)
+            # acc_list.append(accuracy)
+            # epoch_acc_list.append(epoch)
+            # fig_acc, ax_acc = plt.subplots()
+            # ax_acc.plot(epoch_acc_list,acc_list)
+            # plt.savefig('./accuracy2.png')
+            # plt.close(fig_acc)
+            if netname is None:
+                netname='net'
+            torch.save(net.state_dict(), netname)
 
 
     return net

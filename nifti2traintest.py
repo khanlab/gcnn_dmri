@@ -12,7 +12,7 @@ from nibabel import load
 Functions that allow us to load training and test data from nifti files
 """
 
-def load(datapath,dtipath,N_train,N_test,N_valid,interp='inverse_distance'):
+def load(datapath,dtipath,N_train,N_test,N_valid,all=None,interp='inverse_distance'):
     """
     :param path: path of diffusion and dti data
     :param N_train: Number of training voxels
@@ -71,18 +71,24 @@ def load(datapath,dtipath,N_train,N_test,N_valid,interp='inverse_distance'):
     voxels = np.asarray([i, j, k]).T
 
     # have to pick inds in a manner that avoids overlap
-    max_number_voxels=len(voxels)
-    N_total=N_train+N_test+N_valid
-    cut_train = int(max_number_voxels*N_train/N_total)-1
-    cut_test  = cut_train + int(max_number_voxels * N_test / N_total)-1
-    cut_valid = cut_test +  int(max_number_voxels * N_valid / N_total)-1
-    print(cut_train, cut_test, cut_valid)
-    training_inds = random.sample(range(cut_train), N_train)
-    test_inds = random.sample(range(cut_train, cut_test), N_test)
-    valid_inds = random.sample(range(cut_test, cut_valid), N_test)
+
+    if all == 1: #pick all?
+        training_inds=np.arange(0,len(i))
+        test_inds=[0]
+        valid_inds=[0]
+    else:
+        max_number_voxels=len(voxels)
+        N_total=N_train+N_test+N_valid
+        cut_train = int(max_number_voxels*N_train/N_total)-1
+        cut_test  = cut_train + int(max_number_voxels * N_test / N_total)-1
+        cut_valid = cut_test +  int(max_number_voxels * N_valid / N_total)-1
+        print(cut_train, cut_test, cut_valid)
+        training_inds = random.sample(range(cut_train), N_train)
+        test_inds = random.sample(range(cut_train, cut_test), N_test)
+        valid_inds = random.sample(range(cut_test, cut_valid), N_test)
 
 
-    #pick straight voxels for testing
+        #pick straight voxels for testing
     #N = N_train + N_test
     #all_inds = np.arange(0, N)
     # training_inds = all_inds[0:N_train]
@@ -114,7 +120,6 @@ def load(datapath,dtipath,N_train,N_test,N_valid,interp='inverse_distance'):
     X_validp[np.isnan(X_validp)] = 0
 
     # get all of dti and then select required later on during training
-
 
     Y_trainp = dti_to_array_Y(dti,train_voxels)
     Y_testp = dti_to_array_Y(dti,test_voxels)
