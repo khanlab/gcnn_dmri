@@ -21,10 +21,33 @@ from torch import nn
 from torch.utils.data import DataLoader
 import dihedral12 as d12
 from torch.nn import MaxPool2d
+from gPyTorch import gNetFromList
 import copy
 import time
 import nifti2traintest as ntt
+import pickle
 
+def path_from_modelParams(modelParams):
+    def array2str(A):
+        out=str(A[0])
+        for i in range(1,len(A)):
+            out=out + '-'+(str(A[i]))
+        return out
+
+    path = 'Ntrain-' + str(modelParams['Ntrain'])
+    path = path + '_Nepochs-' + str(modelParams['Nepochs'])
+    path = path + '_patience-' + str(modelParams['patience'])
+    path = path + '_factor-' + str(modelParams['factor'])
+    path = path + '_lr-' + str(modelParams['lr'])
+    path = path + '_batch_size-'+ str(modelParams['batch_size'])
+    path = path + '_interp-' + str(modelParams['interp'])
+    path = path + '_glayers-'+ array2str(modelParams['gfilterlist'])
+    path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[1]
+    path = path + '_linlayers-' + array2str(modelParams['linfilterlist'])
+    path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[1]
+    path = path + '_' + str(modelParams['misc'])
+
+    return path
 
 class lNetFromList(Module):
     """
@@ -60,12 +83,12 @@ def get_accuracy(net,input_val,target_val):
     accuracy = torch.rad2deg( torch.arccos( accuracy.sum(dim=-1).abs()))
     return accuracy.mean().detach().cpu()
 
-class net(Module):
+class gnet(Module):
     """
     This will create the entire network
     """
     def __init__(self,linfilterlist,gconfilterlist,shells,H,lactivationlist=None,gactivationlist=None):
-        super(net,self).__init__()
+        super(gnet,self).__init__()
         self.input=input
         self.linfilterlist=linfilterlist
         self.gconfilterlist=gconfilterlist
@@ -91,70 +114,80 @@ class net(Module):
 
         return x
 
-def train(net,input,target,input_val,target_val, loss,lr,batch_size,factor,patience,Nepochs,lossname=None,netname=None):
-
-    criterion = loss
-    optimizer = optim.Adamax(net.parameters(), lr=lr)  # , weight_decay=0.001)
-    optimizer.zero_grad()
-    scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=factor, patience=patience, verbose=True)
-
-    running_loss = 0
-
-    train = torch.utils.data.TensorDataset(input, target)
-    trainloader = DataLoader(train, batch_size=batch_size)
 
 
-    epochs_list=[]
-    loss_list=[]
+class trainer:
+    def __init__(self,modelParams,Xtrain,Ytrain):
+        """
+        Class to create and train networks
+        :param modelParams: A dict with all network parameters
+        :param Xtrain: Cuda Xtrain data
+        :param Ytrain: Cuda Ytrain data
+        """
+        self.modelParams=modelParams
+        self.Xtrain=Xtrain
+        self.Ytrain=Ytrain
+        self.net=[]
 
-    acc_list=[]
-    epoch_acc_list=[]
+    def makeNetwork(self):
+        self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
+                        self.modelParams['shells'],self.modelParams['H'],
+                        self.modelParams['lactivationlist'],
+                        self.modelParams['gactivationlist'])
+        self.net = self.net.cuda()
 
-    for epoch in range(0, Nepochs):
-        print(epoch)
-        for n, (inputs, targets) in enumerate(trainloader, 0):
-            optimizer.zero_grad()
+    def train(self):
+        outpath = path_from_modelParams(self.modelParams)
+        lossname = outpath + 'loss.png'
+        netname = outpath + 'net'
+        criterion = self.modelParams['loss']
+        optimizer = optim.Adamax(self.net.parameters(), lr=self.modelParams['lr'])  # , weight_decay=0.001)
+        optimizer.zero_grad()
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=self.modelParams['factor'],
+                                      patience=self.modelParams['patience'],
+                                      verbose=True)
+        running_loss = 0
+        train = torch.utils.data.TensorDataset(self.Xtrain, self.Ytrain)
+        trainloader = DataLoader(train, batch_size=self.modelParams['batch_size'])
 
-            output = net(inputs.cuda())
-            #print(output.shape)
-            #print(targets.shape)
-            loss = criterion(output, targets)
-            loss = loss.sum()
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-        else:
-            print(running_loss / len(trainloader))
-            loss_list.append(running_loss / len(trainloader))
-            epochs_list.append(epoch)
-            #print(output[0])
-            if np.isnan(running_loss / len(trainloader)) == 1:
-                break
+        epochs_list = []
+        loss_list = []
 
-        scheduler.step(running_loss)
-        running_loss = 0.0
-        if (epoch % 10)==9:
-            fig_err, ax_err = plt.subplots()
-            ax_err.plot(epochs_list,np.log10(loss_list))
-            if lossname is None:
-                lossname='loss.png'
-            plt.savefig(lossname)
-            plt.close(fig_err)
-            # accuracy=get_accuracy(net,input_val,target_val)
-            # acc_list.append(accuracy)
-            # epoch_acc_list.append(epoch)
-            # fig_acc, ax_acc = plt.subplots()
-            # ax_acc.plot(epoch_acc_list,acc_list)
-            # plt.savefig('./accuracy2.png')
-            # plt.close(fig_acc)
-            if netname is None:
-                netname='net'
-            torch.save(net.state_dict(), netname)
+        for epoch in range(0, self.modelParams['Nepochs']):
+            print(epoch)
+            for n, (inputs, targets) in enumerate(trainloader, 0):
+                optimizer.zero_grad()
 
+                output = self.net(inputs.cuda())
+                loss = criterion(output, targets)
+                loss = loss.sum()
+                loss.backward()
+                optimizer.step()
+                running_loss += loss.item()
+            else:
+                print(running_loss / len(trainloader))
+                loss_list.append(running_loss / len(trainloader))
+                epochs_list.append(epoch)
+                # print(output[0])
+                if np.isnan(running_loss / len(trainloader)) == 1:
+                    break
 
-    return net
+            scheduler.step(running_loss)
+            running_loss = 0.0
+            if (epoch % 10) == 9:
+                fig_err, ax_err = plt.subplots()
+                ax_err.plot(epochs_list, np.log10(loss_list))
+                if lossname is None:
+                    lossname = 'loss.png'
+                plt.savefig(lossname)
+                plt.close(fig_err)
+                if netname is None:
+                    netname = 'net'
+                torch.save(self.net.state_dict(), netname)
 
-
+    def save_modelParams(self,path):
+        with open(path + 'modelParams.pkl','wb') as f:
+            pickle.dump(self.modelParams,f,pickle.HIGHEST_PROTOCOL)
 
 
 

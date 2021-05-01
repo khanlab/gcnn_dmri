@@ -12,6 +12,8 @@ from nibabel import load
 Functions that allow us to load training and test data from nifti files
 """
 
+#TODO: need something here that loads voxels from many different subjects. For example 5000 voxels from 10 subjects
+
 def load(datapath,dtipath,N_train,N_test,N_valid,all=None,interp='inverse_distance'):
     """
     :param path: path of diffusion and dti data

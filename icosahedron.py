@@ -27,8 +27,7 @@ class icomesh:
         self.interpolation_inds=[]
         self.interpolation_mesh=[]
         self.antipodals=[]
-
-
+        self.six_direction_mesh=[] #its actually 12 directions with antipodal points having the same signal
 
     def get_icomesh(self):
         self.vertices.extend([Vec(0.894427,0.000000,0.447214),
@@ -185,4 +184,71 @@ class icomesh:
     #                 string= "%d, %d" % (i,j)
     #                 mlab.text3d(pnt[0],pnt[1],pnt[2],string,scale=0.05)
     #                 mlab.points3d(pnt[0],pnt[1],pnt[2],scale_factor=0.05)
+
+    def getSixDirections(self):
+        """
+        Returns six directions in the middle of each chart of the top half of the icosahedron
+        :return:
+        """
+
+        def vec2np(r):
+            return np.asarray([r[0],r[1],r[2]])
+
+        def mid_vector(r1,r2):
+            r1=vec2np(r1)
+            r2=vec2np(r2)
+            rmid=(r1+r2)/2
+            return rmid/np.sqrt((rmid*rmid).sum())
+
+        pairs = [[0, 2], [2, 11], [11, 9], [9, 6], [6, 0]]
+
+        six_directions = np.zeros([6, 3])
+        six_directions[0,:]=[0,0,1]
+
+        for id,pair in enumerate(pairs):
+            r1 = self.vertices[pair[0]]
+            r2 = self.vertices[pair[1]]
+            six_directions[id+1,:]=mid_vector(r1,r2)
+
+        lons=[]
+        lats=[]
+        for p in range(0,len(six_directions)):
+            x=six_directions[p,0]
+            y=six_directions[p,1]
+            z=six_directions[p,2]
+            lonc,latc=xyz2lonlat(x,y,z)
+            lons.append(lonc)
+            lats.append(latc)
+            lonc, latc = xyz2lonlat(-x, -y, -z)
+            lons.append(lonc)
+            lats.append(latc)
+        self.six_direction_mesh=stripy.sTriangulation(lons,lats,tree=True,permute=True)
+
+        return six_directions
+
+        # lons=[]
+        # lats=[]
+        # for p in range(0,len(self.vertices)):
+        #     x = self.vertices[p][0]
+        #     y = self.vertices[p][1]
+        #     z = self.vertices[p][2]
+        #     lonsc, latsc = xyz2lonlat(x, y, z)
+        #     lons.append(lonsc)
+        #     lats.append(latsc)
+        # self.coarse_ico=stripy.sTriangulation(lons,lats,tree=True,permute=True)
+        # midpts=self.coarse_ico.face_midpoints()
+        # x,y,z = stripy.spherical.lonlat2xyz(midpts[0],midpts[1])
+        # six_directions=np.zeros([6,3])
+        # six_directions[0,0]=0
+        # six_directions[0, 1] = 0
+        # six_directions[0, 2] = 1
+        # a=1
+        # for f in range(0,20,4):
+        #     six_directions[a, 0] = x[f]
+        #     six_directions[a, 1] = y[f]
+        #     six_directions[a, 2] = z[f]
+        #     a=a+1
+        # return six_directions
+
+
 
