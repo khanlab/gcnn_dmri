@@ -42,12 +42,18 @@ def path_from_modelParams(modelParams):
     path = path + '_batch_size-'+ str(modelParams['batch_size'])
     path = path + '_interp-' + str(modelParams['interp'])
     path = path + '_glayers-'+ array2str(modelParams['gfilterlist'])
-    path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[1]
+    try:
+        path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[1]
+    except:
+        path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[0]
     path = path + '_linlayers-' + array2str(modelParams['linfilterlist'])
-    path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[1]
+    try:
+        path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[1]
+    except:
+        path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[0]
     path = path + '_' + str(modelParams['misc'])
 
-    return path
+    return modelParams['basepath']+ path
 
 class lNetFromList(Module):
     """
@@ -185,8 +191,9 @@ class trainer:
                     netname = 'net'
                 torch.save(self.net.state_dict(), netname)
 
-    def save_modelParams(self,path):
-        with open(path + 'modelParams.pkl','wb') as f:
+    def save_modelParams(self):
+        outpath = path_from_modelParams(self.modelParams)
+        with open(outpath + 'modelParams.pkl','wb') as f:
             pickle.dump(self.modelParams,f,pickle.HIGHEST_PROTOCOL)
 
 

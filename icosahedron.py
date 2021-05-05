@@ -195,20 +195,52 @@ class icomesh:
             return np.asarray([r[0],r[1],r[2]])
 
         def mid_vector(r1,r2):
-            r1=vec2np(r1)
-            r2=vec2np(r2)
+            #r1=vec2np(r1)
+            #r2=vec2np(r2)
             rmid=(r1+r2)/2
             return rmid/np.sqrt((rmid*rmid).sum())
 
         pairs = [[0, 2], [2, 11], [11, 9], [9, 6], [6, 0]]
+        topdown=[[1,3],[1,4],[1,10],[1,8],[1,7]]
+
 
         six_directions = np.zeros([6, 3])
         six_directions[0,:]=[0,0,1]
+        # six_directions[0,:]=[-0.416,0,0.910]
+        # six_directions[0,:]=[+0.416,0,0.910]
+        # six_directions[0,:]=[0.910,-0.416,0]
+        # six_directions[0,:]=[0.910,0.416,0]
+        # six_directions[0,:]=[0,0.910,0.416]
+        # six_directions[0,:]=[0,0.910,-0.416]
 
         for id,pair in enumerate(pairs):
-            r1 = self.vertices[pair[0]]
-            r2 = self.vertices[pair[1]]
-            six_directions[id+1,:]=mid_vector(r1,r2)
+            # if id == 0:
+            #     r1 = vec2np(self.vertices[pair[0]])
+            #     r2 = vec2np(self.vertices[pair[1]])
+            #     mid= mid_vector(r1,r2)
+            #     six_directions[id+1,:]=mid_vector(vec2np( self.vertices[1]),mid)
+            # if id ==1:
+            #     r1 =vec2np( self.vertices[pair[0]])
+            #     r2 =vec2np( self.vertices[pair[1]])
+            #     six_directions[id+1,:]=mid_vector(r1,r2)
+            # if id ==2:
+            #     r1 = vec2np( self.vertices[pair[0]])
+            #     r2 = vec2np( self.vertices[pair[1]])
+            #     mid=mid_vector(r1,r2)
+            #     six_directions[id+1,:]=mid_vector(mid,vec2np( self.vertices[ topdown[id][1]]))
+            # if id ==3:
+            #     six_directions[id+1,:]=vec2np( self.vertices[topdown[id][1]])
+            # if id ==4:
+            #     six_directions[id+1,:]=vec2np( self.vertices[pair[0]])
+
+            if id % 2 ==0:
+                r1 = vec2np(self.vertices[pair[0]])
+                r2 = vec2np(self.vertices[pair[1]])
+                six_directions[id+1,:]=mid_vector(r1,r2)
+            else:
+                r1 =vec2np( self.vertices[topdown[id][0]])
+                r2 =vec2np( self.vertices[topdown[id][1]])
+                six_directions[id+1,:]=mid_vector(r2,r2)
 
         lons=[]
         lats=[]
@@ -224,7 +256,7 @@ class icomesh:
             lats.append(latc)
         self.six_direction_mesh=stripy.sTriangulation(lons,lats,tree=True,permute=True)
 
-        return six_directions
+        #return six_directions
 
         # lons=[]
         # lats=[]

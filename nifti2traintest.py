@@ -14,7 +14,7 @@ Functions that allow us to load training and test data from nifti files
 
 #TODO: need something here that loads voxels from many different subjects. For example 5000 voxels from 10 subjects
 
-def load(datapath,dtipath,N_train,N_test,N_valid,all=None,interp='inverse_distance'):
+def load(datapath,dtipath,N_train,N_test=0,N_valid=0,all=None,interp='inverse_distance'):
     """
     :param path: path of diffusion and dti data
     :param N_train: Number of training voxels
@@ -69,12 +69,13 @@ def load(datapath,dtipath,N_train,N_test,N_valid,all=None,interp='inverse_distan
     diff.makeInverseDistInterpMatrix(ico.interpolation_mesh)
 
     # these are all the voxels
-    i, j, k = np.where(diff.mask.get_fdata() == 1)
+    #i, j, k = np.where(diff.mask.get_fdata() == 1)
+    i, j, k = np.where(dti.FA.get_fdata() > 0.3)
     voxels = np.asarray([i, j, k]).T
 
     # have to pick inds in a manner that avoids overlap
 
-    if all == 1: #pick all?
+    if all == True: #pick all?
         training_inds=np.arange(0,len(i))
         test_inds=[0]
         valid_inds=[0]
@@ -97,34 +98,55 @@ def load(datapath,dtipath,N_train,N_test,N_valid,all=None,interp='inverse_distan
     # test_inds = all_inds[N_train:N]
 
     train_voxels = np.asarray([i[training_inds], j[training_inds], k[training_inds]]).T
-    test_voxels = np.asarray([i[test_inds], j[test_inds], k[test_inds]]).T
-    valid_voxels = np.asarray([i[valid_inds], j[valid_inds], k[valid_inds]]).T
+    S0_train, flat_train, signal_train = diff.makeFlat(train_voxels, ico,interp=interp)
+    if N_test>0:
+        test_voxels = np.asarray([i[test_inds], j[test_inds], k[test_inds]]).T
+        S0_test, flat_test, signal_test = diff.makeFlat(test_voxels, ico,interp=interp)
+    if N_valid>0:    
+        valid_voxels = np.asarray([i[valid_inds], j[valid_inds], k[valid_inds]]).T
+        S0_valid, flat_valid, signal_valid = diff.makeFlat(valid_voxels, ico,interp=interp)
+
+
+
 
     # this is for X_train and X_test
-    S0_train, flat_train, signal_train = diff.makeFlat(train_voxels, ico,interp=interp)
-    S0_test, flat_test, signal_test = diff.makeFlat(test_voxels, ico,interp=interp)
-    S0_valid, flat_valid, signal_valid = diff.makeFlat(valid_voxels, ico,interp=interp)
-
+    
     I, J, T = d12.padding_basis(ico.m + 1)
 
 
     # this should be in correct format
     X_trainp = np.copy(list_to_array_X(S0_train, flat_train))
-    X_testp = np.copy(list_to_array_X(S0_test, flat_test))
-    X_validp = np.copy(list_to_array_X(S0_valid, flat_valid))
+    if N_test>0:
+        X_testp = np.copy(list_to_array_X(S0_test, flat_test))
+    if N_valid>0:
+        X_validp = np.copy(list_to_array_X(S0_valid, flat_valid))
 
     #might have to remove this step later on
     X_trainp[np.isinf(X_trainp)] = 0
-    X_testp[np.isinf(X_testp)] = 0
-    X_validp[np.isinf(X_validp)] = 0
     X_trainp[np.isnan(X_trainp)] = 0
-    X_testp[np.isnan(X_testp)] = 0
-    X_validp[np.isnan(X_validp)] = 0
+    
+    if N_test>0:
+        X_testp[np.isinf(X_testp)] = 0
+        X_testp[np.isnan(X_testp)] = 0
+    
+    if N_valid>0:
+        X_validp[np.isinf(X_validp)] = 0
+        X_validp[np.isnan(X_validp)] = 0
 
     # get all of dti and then select required later on during training
 
     Y_trainp = dti_to_array_Y(dti,train_voxels)
-    Y_testp = dti_to_array_Y(dti,test_voxels)
-    Y_validp = dti_to_array_Y(dti, valid_voxels)
+    if N_test>0:
+        Y_testp = dti_to_array_Y(dti,test_voxels)
 
-    return X_trainp,Y_trainp,X_testp,Y_testp,X_validp,Y_validp, ico,diff
+    if N_valid>0:
+        Y_validp = dti_to_array_Y(dti, valid_voxels)
+
+    if N_test>0 and N_valid>0:
+        return X_trainp,Y_trainp,X_testp,Y_testp,X_validp,Y_validp, ico,diff
+    elif N_test >0:
+        return X_trainp,Y_trainp,X_testp,Y_testp, ico,diff
+    elif N_valid >0:
+        return X_trainp,Y_trainp,X_validp,Y_validp, ico,diff
+    else:
+        return X_trainp,Y_trainp, ico,diff

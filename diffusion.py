@@ -10,7 +10,6 @@ from scipy.spatial import KDTree
 import dipy
 
 
-
 class dti():
     """
     Class for dti results
@@ -43,7 +42,7 @@ class diffDownsample():
     """
     Class to reduce bvecs of diffusion data
     """
-    def __init__(self,diff,ico,interp='linear'):
+    def __init__(self,diff,ico,interp='inverse_distance'):
         self.diff = diff
         self.down_nii=[]
         self.ico=ico
@@ -67,12 +66,12 @@ class diffDownsample():
                 interp_matrix[row, idx[row]] = weights[row] / norm
             self.down_interp_matrix.append(interp_matrix)
 
-    def downSample(self,anti_treat='same'):
+    def downSampleFromList(self,voxels,anti_treat='same'):
         interp=self.interp
-        i, j, k = np.where(self.diff.mask.get_fdata() == 1)
-        voxels = np.asarray([i, j, k]).T
-        sz=self.diff.vol.shape
-        sz.extend([7])
+        #i, j, k = np.where(self.diff.mask.get_fdata() == 1)
+        #voxels = np.asarray([i, j, k]).T
+        #sz=self.diff.vol.shape
+        #sz.extend([7])
         ico_signal=[]
         S0=[]
         for pid,p in enumerate(voxels):
@@ -81,17 +80,17 @@ class diffDownsample():
             for sid in range(0,2):
                 location=[]
                 location.extend(p)
-                location.append(self.inds[sid])
+                location.append(self.diff.inds[sid])
                 location=tuple(location)
-                S=self.vol.get_fdata()[location]
+                S=self.diff.vol.get_fdata()[location]
                 if sid==0:
                     S0_per_point.append(S)
                     continue
                 ico_lons = self.ico.six_direction_mesh.lons
                 ico_lats = self.ico.six_direction_mesh.lats
-                if interp == 'nearest': temp, err = self.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=0,zdata=S)
-                if interp == 'linear': temp, err = self.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=1,zdata=S)
-                if interp == 'cubic': temp, err = self.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=3,zdata=S)
+                if interp == 'nearest': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=0,zdata=S)
+                if interp == 'linear': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=1,zdata=S)
+                if interp == 'cubic': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=3,zdata=S)
                 if interp == 'inverse_distance': temp = np.matmul(self.down_interp_matrix[sid - 1],S )  # inverse distance
                 new_temp = np.zeros(len(ico_lats))
                 for t in range(0,len(ico_lats),2):# add something to take average of antipodal signal or just use top
@@ -105,7 +104,8 @@ class diffDownsample():
                         new_temp[t+1]=0.5*(S1+S2)
                 ico_signal_per_shell.append(new_temp)
             ico_signal.append(ico_signal_per_shell)
-        S0.append(S0_per_point)
+            S0.append(S0_per_point)
+        return S0,ico_signal
 
 
 
@@ -289,7 +289,7 @@ class diffVolume():
             #if ico_signal_per_shell is not None:
             ico_signal.append(ico_signal_per_shell)
             flat.append(flat_per_shell)
-        S0.append(S0_per_point)
+            S0.append(S0_per_point)
 
         return S0, flat, ico_signal
 

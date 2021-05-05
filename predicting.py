@@ -6,6 +6,7 @@ import dihedral12 as d12
 import pickle
 import training
 import torch
+import nibabel as nib
 
 
 """
@@ -16,6 +17,23 @@ Fuctions and classes to make predictions
 def load_obj(path):
     with open(path + 'modelParams.pkl', 'rb') as f:
         return pickle.load(f)
+
+def convert2cuda(X_train):
+    X_train_p = np.copy(1/X_train)
+    #X_train_p = np.copy(X_train)
+    X_train_p[np.isinf(X_train_p)] = 0
+    X_train_p[np.isnan(X_train_p)] = 0
+    inputs = X_train_p
+    inputs = torch.from_numpy(inputs.astype(np.float32))
+    input = inputs.detach()
+    input = input.cuda()
+    return input
+
+def normalize(Ypredict):
+    out=Ypredict
+    norm=np.sqrt(np.sum(out*out,-1))
+    return out/norm[:,None]
+        
 
 class predictor:
     def __init__(self, datapath, dtipath, netpath):
@@ -83,19 +101,32 @@ class predictor:
     def loadNetwork(self,path):
         #load pkl file for model params and initiate network
         self.modelParams=load_obj(path)
-        trnr=training.trainer(self.modelParams)
+        trnr=training.trainer(self.modelParams,0,0)
         trnr.makeNetwork()
         self.net=trnr.net
         self.net.load_state_dict(torch.load(path+ 'net'))
 
     def predict(self,Nout=3,batch_size=1000):
-
+        self.Xpredict=convert2cuda(self.Xpredict)
         self.Ypredict=np.zeros([len(self.Xpredict),Nout])
         for p in range(0,len(self.Ypredict),batch_size):
+            print(p)
             self.Ypredict[p:p+batch_size,:]=self.net(self.Xpredict[p:p+batch_size,:]).cpu().detach()
 
+
+
+
     def savePredictions(self,path):
+        
+        Y=normalize(self.Ypredict)
+        
         Nout=self.Ypredict.shape[-1]
-        size = self.diff.mask.shape
-        #come back to this
+        
+        dtiout=np.zeros_like(self.dti.V1.get_fdata())
+        dtiout[self.i,self.j,self.k,:]=Y[:,:]
+
+        dtiout=nib.Nifti1Image(dtiout,self.dti.V1.affine)
+        nib.save(dtiout,path)
+
+
         pass
