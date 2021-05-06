@@ -36,7 +36,10 @@ test=diffdown.downSampleFromList(voxels[1:10000])
 end=time.time()
 print(end-start)
 
-
+#downsample
+#for each subject,bvec create 10000 Xtrain
+#combine these and train for each bvec
+#test with completely unseen subject
 
 
 #xyz=ico.getSixDirections()

@@ -7,8 +7,9 @@ from stripy.spherical import xyz2lonlat
 from icosahedron import icomesh
 from dihedral12 import xy2ind
 from scipy.spatial import KDTree
+import nibabel as nib
 import dipy
-
+import os
 
 class dti():
     """
@@ -38,74 +39,7 @@ class dti():
         self.V2 = load(pathprefix + "_V2.nii.gz")
         self.V3 = load(pathprefix + "_V3.nii.gz")
 
-class diffDownsample():
-    """
-    Class to reduce bvecs of diffusion data
-    """
-    def __init__(self,diff,ico,interp='inverse_distance'):
-        self.diff = diff
-        self.down_nii=[]
-        self.ico=ico
-        self.interp=interp
-        self.down_interp_matrix=[]
-        if self.interp=='inverse_distance': self.makeDownInterpMatrix() #makes the interpolation matrix
 
-    def makeDownInterpMatrix(self):
-        """
-        Function to make a inverse distance interpolation matrix for the six (12)-direction mesh
-        :return: populate self.down_interp_matrix
-        """
-        N_ico = len(self.ico.six_direction_mesh.lons)
-        for bvec_mesh in self.diff.bvec_meshes:
-            N_bvec = len(bvec_mesh.lons)
-            interp_matrix = np.zeros([N_ico, N_bvec])
-            dist, idx = bvec_mesh.nearest_vertices(self.ico.six_direction_mesh.lons, self.ico.six_direction_mesh.lats, k=10)
-            weights = 1 / dist
-            for row in range(0, N_ico):
-                norm = sum(weights[row])
-                interp_matrix[row, idx[row]] = weights[row] / norm
-            self.down_interp_matrix.append(interp_matrix)
-
-    def downSampleFromList(self,voxels,anti_treat='same'):
-        interp=self.interp
-        #i, j, k = np.where(self.diff.mask.get_fdata() == 1)
-        #voxels = np.asarray([i, j, k]).T
-        #sz=self.diff.vol.shape
-        #sz.extend([7])
-        ico_signal=[]
-        S0=[]
-        for pid,p in enumerate(voxels):
-            S0_per_point = []
-            ico_signal_per_shell=[]
-            for sid in range(0,2):
-                location=[]
-                location.extend(p)
-                location.append(self.diff.inds[sid])
-                location=tuple(location)
-                S=self.diff.vol.get_fdata()[location]
-                if sid==0:
-                    S0_per_point.append(S)
-                    continue
-                ico_lons = self.ico.six_direction_mesh.lons
-                ico_lats = self.ico.six_direction_mesh.lats
-                if interp == 'nearest': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=0,zdata=S)
-                if interp == 'linear': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=1,zdata=S)
-                if interp == 'cubic': temp, err = self.diff.bvec_meshes[sid - 1].interpolate(ico_lons, ico_lats, order=3,zdata=S)
-                if interp == 'inverse_distance': temp = np.matmul(self.down_interp_matrix[sid - 1],S )  # inverse distance
-                new_temp = np.zeros(len(ico_lats))
-                for t in range(0,len(ico_lats),2):# add something to take average of antipodal signal or just use top
-                    S1=temp[t]
-                    S2=temp[t+1]
-                    if anti_treat=='same':
-                        new_temp[t]=S1
-                        new_temp[t+1]=S1
-                    else:
-                        new_temp[t]=0.5*(S1+S2)
-                        new_temp[t+1]=0.5*(S1+S2)
-                ico_signal_per_shell.append(new_temp)
-            ico_signal.append(ico_signal_per_shell)
-            S0.append(S0_per_point)
-        return S0,ico_signal
 
 
 
@@ -333,8 +267,52 @@ class diffVolume():
 
         return flat
 
+    def downSampleFromList(self, basepath,subjectid):
+        """
+        Creates 10 volumes with bvec directions ranging from 6-90 of the first shell
+        :param path: path to save all the volumes
+        :return: Will create folders for each downsample with mask, bvecs and bvals in it
+        """
+
+        Ndirs=len(self.bvecs_sorted[1])
+        cuts=np.linspace(6,Ndirs,10).astype(int)
+        cuts[-1]=Ndirs #incase this is different from rounding
+
+        def write_bvec_comp(fbvec,xyz,maxdirs):
+            for i in range(1, maxdirs):
+                fbvec.write(str(self.bvecs_sorted[1][i-1,xyz]) + ' ')
+            fbvec.write("\n")
 
 
+        for c,cut in enumerate(cuts):
+            print('downsampling with '+ str(cut)+ ' directions' )
+            diffout=np.zeros(self.vol.shape[0:3] + (cut+1,))
+            diffout[:,:,:,0]=self.vol.get_fdata()[:,:,:,self.inds[0][0]] #just take the first b0 value
+            diffout[:,:,:,1:]=self.vol.get_fdata()[:,:,:,self.inds[1][0:cut]]
+            path = basepath + '/' + subjectid + '/' + str(cut)
+            if not os.path.exists(path):
+                os.makedirs(path)
+            diffout=nib.Nifti1Image(diffout,self.vol.affine)
+            nib.save(diffout,path + "/data.nii.gz")
+            nib.save(self.mask , path+ "/nodif_brain_mask.nii.gz")
+
+            fbval = open(path + '/bvals', "w")
+            fbval.write(str(self.bvals_sorted[0][0]) + " ") #write the b0 bval
+            for i in range(1, diffout.shape[-1]):
+                print(i)
+                fbval.write(str(self.bvals_sorted[1][i-1]) + " ") #wirte the remaining bvals
+            fbval.close()
+
+            fbvec = open(path + '/bvecs', "w")
+            fbvec.write(str(self.bvecs_sorted[0][0,0]) + " ") #b0 x dir
+            write_bvec_comp(fbvec,0,diffout.shape[-1]) #remaining x dirs
+
+            fbvec.write(str(self.bvecs_sorted[0][0, 1]) + " ")
+            write_bvec_comp(fbvec, 1, diffout.shape[-1])
+
+            fbvec.write(str(self.bvecs_sorted[0][0, 2]) + " ")
+            write_bvec_comp(fbvec, 2, diffout.shape[-1])
+            fbvec.close()
 
 
 
