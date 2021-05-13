@@ -34,7 +34,9 @@ def path_from_modelParams(modelParams):
             out=out + '-'+(str(A[i]))
         return out
 
-    path = 'Ntrain-' + str(modelParams['Ntrain'])
+    path = 'bvec-dirs-' + str(modelParams['bvec_dirs'])
+    path = path + '_type-' + str(modelParams['type'])
+    path = path + '_Ntrain-' + str(modelParams['Ntrain'])
     path = path + '_Nepochs-' + str(modelParams['Nepochs'])
     path = path + '_patience-' + str(modelParams['patience'])
     path = path + '_factor-' + str(modelParams['factor'])

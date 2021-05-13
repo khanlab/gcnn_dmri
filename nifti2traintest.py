@@ -69,8 +69,10 @@ def load(datapath,dtipath,N_train,N_test=0,N_valid=0,all=None,interp='inverse_di
     diff.makeInverseDistInterpMatrix(ico.interpolation_mesh)
 
     # these are all the voxels
-    #i, j, k = np.where(diff.mask.get_fdata() == 1)
-    i, j, k = np.where(dti.FA.get_fdata() > 0.3)
+    i, j, k = np.where(diff.mask.get_fdata() == 1)
+    #i, j, k = np.where(dti.FA.get_fdata() > 0.3)
+    if all == True:
+        i, j, k = np.where(diff.mask.get_fdata() == 1)
     voxels = np.asarray([i, j, k]).T
 
     # have to pick inds in a manner that avoids overlap

@@ -28,6 +28,7 @@ from gPyTorch import gNetFromList
 from training import lNetFromList
 import os
 from sklearn import preprocessing
+import sys
 
 def convert2cuda(X_train,Y_train):
     X_train_p = np.copy(1/X_train)
@@ -63,17 +64,42 @@ def dotLoss(output, target):
 #datapath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/100408/T1w/Diffusion"
 #dtipath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/deriv/hcp1200_dtifit/results/sub-100408/dtifit"
 
-datapath="/home/u2hussai/scratch/dtitraining/downsample/sub-124220/"
-dtipath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/deriv/hcp1200_dtifit/results/sub-124220/dtifit"
-
-
+#datapath="/home/u2hussai/scratch/dtitraining/downsample/sub-124220/"
+#dtipath="/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/deriv/hcp1200_dtifit/results/sub-124220/dtifit"
 
 #datapath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion"
 #dtipath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/dti"
 
+basepath = sys.argv[1] #path where the subjects are
+subjectfile= sys.argv[2] #path where the subject list file is
+bvec = sys.argv[3] #how many bvectors
 
-Ntrain=100000
-X_train, Y_train, ico, diff=ntt.load(datapath,dtipath,Ntrain)
+#get the subjectlist 
+with open(subjectfile) as f:
+    subjects=f.read().splitlines()
+
+def zscore(Xtrain):
+    #Xtrain = 1-Xtrain
+    return Xtrain
+    #Xtrain_mean = Xtrain.mean(axis=0)
+    #Xtrain_std = Xtrain.std(axis=0)
+    #return (Xtrain - Xtrain_mean)/Xtrain_std
+
+
+
+max=20000
+#stack all the subjects into one Xtrain, Ytrain
+X_train = zscore(np.load(basepath+'/'+subjects[0]+'/'+bvec+'/'+'X_train_20000.npy')[0:max])
+print(X_train.shape)
+Y_train = np.load(basepath+'/'+subjects[0]+'/'+bvec+'/'+'Y_train_20000.npy')[0:max]
+for s in range(1,len(subjects)):
+    X_train=np.row_stack((X_train,zscore(np.load(basepath+'/'+subjects[s]+'/'+bvec+'/'+'X_train_20000.npy')[0:max])))
+    Y_train=np.row_stack((Y_train,np.load(basepath+'/'+subjects[s]+'/'+bvec+'/'+'Y_train_20000.npy')[0:max]))
+    
+    
+
+Ntrain=len(X_train)
+# X_train, Y_train, ico, diff=ntt.load(datapath,dtipath,Ntrain)
 print(X_train.shape,Y_train.shape)
 X_train,Y_train=convert2cuda(X_train,Y_train)
 
@@ -82,7 +108,7 @@ h= 5 * (H + 1)
 w=  H + 1
 gfilterlist=[1,4,8,16,32,64,128]
 gactivationlist=[F.relu for i in range(0,len(gfilterlist)-1)]
-linfilterlist=[int(gfilterlist[-1] * h * w / 4),64,32,16,8,3]
+linfilterlist=[int(gfilterlist[-1] * h * w / 4),32,16,8,3]
 lactivationlist=[F.relu for i in range(0,len(linfilterlist)-1)]
 lactivationlist[-1]=None
 #gactivationlist=None
@@ -93,9 +119,10 @@ modelParams={'H':5,
              'gactivationlist': gactivationlist ,
              'lactivationlist': lactivationlist,
              'loss': dotLoss,
+             'bvec_dirs': bvec,
              'batch_size': 16,
              'lr': 1e-2,
-             'factor': 0.5,
+             'factor': 0.65,
              'Nepochs': 200,
              'patience': 20,
              'Ntrain': Ntrain,
@@ -103,6 +130,7 @@ modelParams={'H':5,
              'Nvalid': 1,
              'interp': 'inverse_distance',
              'basepath': '/home/u2hussai/scratch/dtitraining/networks/',
+             'type': 'V1',
              'misc':''
             }
 

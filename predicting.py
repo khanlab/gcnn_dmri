@@ -19,7 +19,7 @@ def load_obj(path):
         return pickle.load(f)
 
 def convert2cuda(X_train):
-    X_train_p = np.copy(1/X_train)
+    X_train_p = np.copy(X_train)
     #X_train_p = np.copy(X_train)
     X_train_p[np.isinf(X_train_p)] = 0
     X_train_p[np.isnan(X_train_p)] = 0
@@ -45,6 +45,7 @@ class predictor:
         self.Xpredict=[]
         self.Ypredict=[]
         self.net=[]
+        self.netpath = netpath
 
         # load diffusion data
         self.diff = diffusion.diffVolume()
@@ -82,7 +83,12 @@ class predictor:
         :param path:
         :return: populate self.Xpredict
         """
-        self.Xpredict=np.load(path)
+        self.Xpredict=1-np.load(path)
+        #print(self.Xpredict.shape)
+        #Xpredict_mean = np.mean(self.Xpredict,axis=0)
+        #Xpredict_std = np.std(self.Xpredict,axis=0)
+        #self.Xpredict = (self.Xpredict - Xpredict_mean)/Xpredict_std
+        
 
     def list_to_array_X(self,S, flats):
         # convert the lists to arrays and also normalize the data to make attenutations brighter
@@ -98,8 +104,9 @@ class predictor:
                 out[p, s, :, :]=temp #notice no normalizaton applied for now
         return out
 
-    def loadNetwork(self,path):
+    def loadNetwork(self):
         #load pkl file for model params and initiate network
+        path=self.netpath
         self.modelParams=load_obj(path)
         trnr=training.trainer(self.modelParams,0,0)
         trnr.makeNetwork()
@@ -109,6 +116,7 @@ class predictor:
     def predict(self,Nout=3,batch_size=1000):
         self.Xpredict=convert2cuda(self.Xpredict)
         self.Ypredict=np.zeros([len(self.Xpredict),Nout])
+        print('making predictions for a total of '+ str(len(self.Ypredict))+ 'inputs')
         for p in range(0,len(self.Ypredict),batch_size):
             print(p)
             self.Ypredict[p:p+batch_size,:]=self.net(self.Xpredict[p:p+batch_size,:]).cpu().detach()

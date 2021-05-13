@@ -137,7 +137,7 @@ class diffVolume():
         for bvec_mesh in self.bvec_meshes:
             N_bvec=len(bvec_mesh.lons)
             interp_matrix = np.zeros([N_ico, N_bvec])
-            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=10)
+            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=6)
             weights=1/dist
             for row in range(0,N_ico):
                 norm=sum(weights[row])
@@ -267,7 +267,7 @@ class diffVolume():
 
         return flat
 
-    def downSampleFromList(self, basepath,subjectid):
+    def downSample(self, basepath,subjectid):
         """
         Creates 10 volumes with bvec directions ranging from 6-90 of the first shell
         :param path: path to save all the volumes
@@ -277,18 +277,22 @@ class diffVolume():
         Ndirs=len(self.bvecs_sorted[1])
         cuts=np.linspace(6,Ndirs,10).astype(int)
         cuts[-1]=Ndirs #incase this is different from rounding
+        
+        bval_inds=np.linspace(1,len(self.bvecs_sorted[0]),10).astype(int)
+        bval_inds[-1]=len(self.bvecs_sorted[0])
 
         def write_bvec_comp(fbvec,xyz,maxdirs):
-            for i in range(1, maxdirs):
-                fbvec.write(str(self.bvecs_sorted[1][i-1,xyz]) + ' ')
+            for i in range(0, maxdirs):
+                fbvec.write(str(self.bvecs_sorted[1][i,xyz]) + ' ')
             fbvec.write("\n")
 
 
         for c,cut in enumerate(cuts):
             print('downsampling with '+ str(cut)+ ' directions' )
-            diffout=np.zeros(self.vol.shape[0:3] + (cut+1,))
-            diffout[:,:,:,0]=self.vol.get_fdata()[:,:,:,self.inds[0][0]] #just take the first b0 value
-            diffout[:,:,:,1:]=self.vol.get_fdata()[:,:,:,self.inds[1][0:cut]]
+            diffout=np.zeros(self.vol.shape[0:3] +(cut+bval_inds[c],))
+            print(diffout.shape)
+            diffout[:,:,:,0:bval_inds[c]]=self.vol.get_fdata()[:,:,:,self.inds[0][0:bval_inds[c]]] #increae b0 steadily also
+            diffout[:,:,:,bval_inds[c]:]=self.vol.get_fdata()[:,:,:,self.inds[1][0:cut]]
             path = basepath + '/' + subjectid + '/' + str(cut)
             if not os.path.exists(path):
                 os.makedirs(path)
@@ -297,21 +301,25 @@ class diffVolume():
             nib.save(self.mask , path+ "/nodif_brain_mask.nii.gz")
 
             fbval = open(path + '/bvals', "w")
-            fbval.write(str(self.bvals_sorted[0][0]) + " ") #write the b0 bval
-            for i in range(1, diffout.shape[-1]):
+            for i in range(0,bval_inds[c]):
+                fbval.write(str(self.bvals_sorted[0][i]) + " ") #write the b0 bval
+            for i in range(0, diffout.shape[-1]-bval_inds[c]):
                 print(i)
-                fbval.write(str(self.bvals_sorted[1][i-1]) + " ") #wirte the remaining bvals
+                fbval.write(str(self.bvals_sorted[1][i]) + " ") #wirte the remaining bvals
             fbval.close()
 
             fbvec = open(path + '/bvecs', "w")
-            fbvec.write(str(self.bvecs_sorted[0][0,0]) + " ") #b0 x dir
-            write_bvec_comp(fbvec,0,diffout.shape[-1]) #remaining x dirs
+            for i in range(0,bval_inds[c]):
+                fbvec.write(str(self.bvecs_sorted[0][i,0]) + " ") #b0 x dir
+            write_bvec_comp(fbvec,0,diffout.shape[-1]-bval_inds[c]) #remaining x dirs
 
-            fbvec.write(str(self.bvecs_sorted[0][0, 1]) + " ")
-            write_bvec_comp(fbvec, 1, diffout.shape[-1])
+            for i in range(0,bval_inds[c]):
+                fbvec.write(str(self.bvecs_sorted[0][i, 1]) + " ")
+            write_bvec_comp(fbvec, 1, diffout.shape[-1]-bval_inds[c])
 
-            fbvec.write(str(self.bvecs_sorted[0][0, 2]) + " ")
-            write_bvec_comp(fbvec, 2, diffout.shape[-1])
+            for i in range(0,bval_inds[c]):
+                fbvec.write(str(self.bvecs_sorted[0][i, 2]) + " ")
+            write_bvec_comp(fbvec, 2, diffout.shape[-1]-bval_inds[c])
             fbvec.close()
 
 
