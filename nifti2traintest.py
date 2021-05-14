@@ -93,7 +93,7 @@ def load(datapath,dtipath,N_train,N_test=0,N_valid=0,all=None,interp='inverse_di
         valid_inds = random.sample(range(cut_test, cut_valid), N_test)
 
 
-        #pick straight voxels for testing
+    #pick straight voxels for testing
     #N = N_train + N_test
     #all_inds = np.arange(0, N)
     # training_inds = all_inds[0:N_train]
