@@ -158,6 +158,25 @@ class gConv2d(Module):
         #return out
         return d12.pad(out,self.I,self.J,self.T)
 
+
+class opool3d(Module):
+    def __init__(self,in_channels):
+        super(opool3d, self).__init__()
+        self.in_channels = in_channels
+        self.opool3d=opool(self.in_channels)
+
+    def forward(self,input):
+        #size of the input is [mini,in_channels,i,j,k,h,w]
+        sz=input.shape
+        out=torch.zeros([sz[0],self.in_channels,sz[2],sz[3],sz[4],sz[5],sz[6]])
+        for i in range(0,input.shape[2]):
+            for j in range(0, input.shape[3]):
+                for k in range(0, input.shape[4]):
+                    this_input=input[:,:,i,j,k,:,:]
+                    out[:,:,i,j,k,:,:]=self.opool3d.forward(this_input)
+        return out
+
+
 class opool(Module):
     #layer for orientation pooling
     def __init__(self,in_channels):
