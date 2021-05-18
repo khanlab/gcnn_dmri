@@ -40,13 +40,15 @@ class gConv3d(Module):
         # initialize weight basis if not deep
         if self.deep == 0:
             self.weight = Parameter(Tensor(out_channels, in_channels, 3,3,3,7))
+            #self.weight = Parameter(Tensor(out_channels, in_channels, 7))
             self.basis_e_h = d12.basis_expansion(self.deep).detach()  # this can be at net level also
             self.basis_e_t = None
 
         # initialize weight basis if deep
         elif self.deep == 1:  # and (in_channels % 12)==0:
             self.weight = Parameter(Tensor(out_channels, in_channels, 3,3,3,12, 7))
-            self.basis_e_h, self.basis_e_t = d12.basis_expansion(self.deep)  # this can be at the net level also
+            #self.weight = Parameter(Tensor(out_channels, in_channels, 12, 7))
+            self.basis_e_h, self.basis_e_t = d12.basis_expansion(self.deep) # this can be at the net level also
             self.basis_e_h = self.basis_e_h.detach()
             self.basis_e_t = self.basis_e_t.detach()
 
@@ -69,31 +71,32 @@ class gConv3d(Module):
         sz=np.asarray(input.shape)
         sz[1]=12*int(self.weight.shape[0])
 
-        out=torch.zeros(tuple(sz))
+        out=torch.zeros(tuple(sz),requires_grad=True).cuda()
         for i in range(0,input.shape[2]-kernelsize):
             for j in range(0, input.shape[3] - kernelsize):
                 for k in range(0, input.shape[4] - kernelsize):
-                    chunk=input[:,:,i:i+kernelsize,j:j+kernelsize,k:k+kernelsize,:,:]
+                    chunk=input[:,:,i:i+kernelsize,j:j+kernelsize,k:k+kernelsize,:,:].cuda()
                     out[:,:,i+1,j+1,k+1,:,:]=self.g2dconvolution(chunk)
 
-        return out #+ self.bias[self.bias_basis].detach()
+        return out #+ self.bias[self.bias_basis]#.detach()
 
 
 
     def g2dconvolution(self,chunk):
         #out=torch.zeros([self.weight[0],3,3,3,self.chunk.shape[-2],self.chunk.shape[-1]])
-        out=torch.zeros([int(self.weight.shape[0]),chunk.shape[-2],chunk.shape[-1]]).cuda()
+        out=torch.zeros([int(12*self.weight.shape[0]),chunk.shape[-2],chunk.shape[-1]],requires_grad=True).cuda()
         for fi in range(0,3):
             for fj in range(0,3):
                 for fk in range(0,3):
                     if self.deep==0:
-                        weight=self.weight[:,:,fi,fj,fk,:]
+                        weight=self.weight[:,:,fi,fj,fk,:].cuda()
                     if self.deep == 1:
-                        weight = self.weight[:, :, fi, fj, fk, :,:]
+                        weight = self.weight[:, :, fi, fj, fk, :,:].cuda()
 
-                    kernel_e = d12.apply_weight_basis(weight, self.basis_e_h,self.basis_e_t).detach()
+                    #kernel_e = d12.apply_weight_basis(self.weight, self.basis_e_h,self.basis_e_t)#.detach()
+                    kernel_e = d12.apply_weight_basis(weight, self.basis_e_h, self.basis_e_t)  # .detach()
                     bias=self.bias[:,fi,fj,fk]
-                    bias_e = bias[self.bias_basis].detach()
+                    bias_e = bias[self.bias_basis]#.detach()
                     temp =F.pad( F.conv2d(chunk[:,:,fi,fj,fk,:,:].float(), kernel_e.float(),bias=bias_e.float()),(1,1,1,1))
                     out = out + d12.pad(temp, self.I, self.J, self.T)
         return out
@@ -142,7 +145,6 @@ class gConv2d(Module):
 
         self.reset_parameters()
 
-
     def reset_parameters(self):
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
@@ -151,8 +153,8 @@ class gConv2d(Module):
 
     def forward(self,input):
         #use the bases to expand the kernel and the bias
-        self.bias_e=self.bias[self.bias_basis].detach()
-        self.kernel_e=d12.apply_weight_basis(self.weight,self.basis_e_h,self.basis_e_t).detach()
+        self.bias_e=self.bias[self.bias_basis]#.detach()
+        self.kernel_e=d12.apply_weight_basis(self.weight,self.basis_e_h,self.basis_e_t)#.detach()
         out=F.conv2d(input.float(),self.kernel_e.float(),bias=self.bias_e.float())
         out=F.pad(out,(1,1,1,1))
         #return out
@@ -163,7 +165,7 @@ class opool3d(Module):
     def __init__(self,in_channels):
         super(opool3d, self).__init__()
         self.in_channels = in_channels
-        self.opool3d=opool(self.in_channels)
+        self.opool2d=opool(self.in_channels)
 
     def forward(self,input):
         #size of the input is [mini,in_channels,i,j,k,h,w]
@@ -173,7 +175,40 @@ class opool3d(Module):
             for j in range(0, input.shape[3]):
                 for k in range(0, input.shape[4]):
                     this_input=input[:,:,i,j,k,:,:]
-                    out[:,:,i,j,k,:,:]=self.opool3d.forward(this_input)
+                    out[:,:,i,j,k,:,:]=self.opool2d.forward(this_input)
+        return out
+
+class linear3d(Module):
+    def __init__(self,in_channels,out_channels,h3d,w3d,d3d,h,w):
+        super(linear3d,self).__init__()
+        self.out_channels = out_channels
+        self.in_channels = in_channels
+        self.h3d=h3d
+        self.w3d=w3d
+        self.d3d=d3d
+        self.h=h
+        self.w=w
+        self.weight = Parameter(Tensor(out_channels, in_channels, h3d,w3d,d3d,h*w))
+        self.bias = Parameter(Tensor(out_channels, h3d,w3d,d3d))
+        self.reset_parameters()
+
+
+    def reset_parameters(self):
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+        bound = 1 / math.sqrt(fan_in)
+        init.uniform_(self.bias, -bound, bound)
+
+    def forward(self,input):
+        out=torch.zeros([input.shape[0],self.h3d,self.w3d,self.d3d,self.out_channels])
+        for i in range(0, self.h3d):
+            for j in range(0, self.w3d):
+                for k in range(0, self.d3d):
+                    vector=input[:,:,i+1,j+1,k+1,:,:] #batch,Cin,h,w
+                    vector=vector.reshape(input.shape[0],-1).cuda()
+                    thisweight=self.weight[:,:,i,j,k,:].reshape(-1,self.in_channels*self.h*self.w).cuda()
+                    bias=self.bias[:,i,j,k].cuda()
+                    out[:,i,j,k,:]=F.linear(vector,thisweight,bias)#torch.matmul(vector,thisweight.T)
         return out
 
 

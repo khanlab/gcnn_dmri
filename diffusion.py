@@ -137,7 +137,7 @@ class diffVolume():
         for bvec_mesh in self.bvec_meshes:
             N_bvec=len(bvec_mesh.lons)
             interp_matrix = np.zeros([N_ico, N_bvec])
-            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=6)
+            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=2)
             weights=1/dist
             for row in range(0,N_ico):
                 norm=sum(weights[row])

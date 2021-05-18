@@ -49,11 +49,18 @@ class chunk_loader:
         Y=[] #output
         for idx,file in enumerate(files):
             parse=re.split(r'[_.]',file)
-            percent=int(parse[3])
+            percent=int(parse[-3])
             if percent >= cut:
+                print('loading: '+ self.path+'data_chunks/'+file)
                 X.append(nib.load(self.path+'data_chunks/'+file).get_fdata())
-                Y.append(nib.load(self.path+'dti_chunks/'+files_dti[idx]).get_fdata())
-        return np.asarray(X),np.asarray(Y)
+                thisstring=''
+                for par in range(2,len(parse)-2):
+                    thisstring=thisstring+"_"+parse[par]
+                print('loading: ' +self.path+'dti_chunks/'+'dti_all'+thisstring)
+                Y.append(nib.load(self.path+'dti_chunks/'+'dti_all'+thisstring+'.nii.gz').get_fdata())
+                print('\n')
+        return np.stack(X,axis=0), np.stack(Y,axis=0)
+
 
 class extractor3d:
     def __init__(self,datapath,dtipath,outpath,interp='inverse_distance'):
@@ -81,7 +88,6 @@ class extractor3d:
         self.N_split = [] #split volume into [N_split, N_split, N_split]
 
     def splitNsave(self,chunk_size=9):
-
 
         #we want our grid to be
         i,j,k=np.where(self.diff.mask.get_fdata()>0)

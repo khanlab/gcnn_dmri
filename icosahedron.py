@@ -13,7 +13,7 @@ class icomesh:
     """
     Class to handle all things icosahedron
     """
-    def __init__(self,m=4):
+    def __init__(self,m=5):
         self.faces=[] #this is the full icosahedron
         self.vertices=[] #this is the full icosahedron
         self.grid=[]

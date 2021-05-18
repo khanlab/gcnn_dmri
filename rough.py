@@ -10,51 +10,147 @@ import torch
 import extract3dDiffusion
 import os
 import matplotlib.pyplot as plt
+from torch.nn.modules.module import Module
+from torch.nn import Linear
+from torch.nn import functional as F
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import DataLoader
+import torch.optim as optim
+
+
 
 datapath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
 dtipath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/dti"
 outpath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
 
-ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
-ext.splitNsave(9)
+#ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
+#ext.splitNsave(9)
 
-# chnk=extract3dDiffusion.chunk_loader(outpath)
-# X,Y=chnk.load(cut=40)
-#
-# X=torch.from_numpy(X)
-# X=X.view((X.shape[0],1)+tuple(X.shape[1:]))
-# X=X.cuda()
-# g3d=gPyTorch.gConv3d(1,1,5,shells=1)
-# g3d=g3d.cuda()
-# # A=torch.rand([3,12,9,9,9,6,30]).cuda()
-# out=g3d.forward(X)
-#
-#
-# class Net(Module):
-#     def __init__(self):
-#         super(Net, self).__init__()
-#         self.flat = 2160
-#         self.conv1 = gConv2d(3, 8, H, shells=3)
-#         self.conv2 = gConv2d(8, 4, H)
-#
-#         self.pool = opool(last)
-#
-#
-#         self.fc1=Linear(int(last * h * w / 4),3)#,end - start-1)
-#
-#
-#     def forward(self, x):
-#
-#         x = self.conv1(x)
-#         x = self.gn1(x)
-#         x = self.conv2(x)
-#         x = self.gn2(x)
-#         x = self.pool(x)
-#         x=self.mx(x)
-#         x = x.view(-1, int(last * h * w / 4))
-#         x = self.fc1(x)
-#
-#         return x
+chnk=extract3dDiffusion.chunk_loader(outpath)
+X,Y=chnk.load(cut=100)
+
+X=1-X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
+#Y=Y.reshape((Y.shape[0],1) + tuple(Y.shape[1:]))
+Y=Y[:,:,:,:,4:7]
+def zeropadder(input):
+    sz=input.shape
+    if len(sz) ==7:
+        out = np.zeros([sz[0], sz[1], sz[2] + 2, sz[3] + 2, sz[4] + 2] + list(sz[5:]))
+        out[:,:,1:-1,1:-1,1:-1,:,:]=input
+        return out
+
+    # if len(sz) == 5:
+    #     out = np.zeros([sz[0], sz[1], sz[2], sz[3]] + list(sz[4:]))
+    #     out[:, 1:-1, 1:-1, 1:-1, :] = input
+    #     return out
+
+
+X=zeropadder(X)
+#Y=zeropadder(Y)
+
+X=torch.from_numpy(X[0:2])
+X[np.isnan(X)==1]=0
+Y=torch.from_numpy(Y[0:2])
+#Y=Y[:,:,:,:,:,4:7]
+X=X.cuda()
+Y=Y.cuda()
+
+H=5
+h= 5 * (H + 1)
+w=H + 1
+last=4
+class Net(Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = gPyTorch.gConv3d(1, 4, H, shells=1)
+        self.conv2 = gPyTorch.gConv3d(4, 4, H)
+        #self.conv3 = gPyTorch.gConv3d(1, 1, H)
+        self.opool = gPyTorch.opool3d(last)
+        self.lin3d = gPyTorch.linear3d(last,3,9,9,9,6,30)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        #x = F.relu(self.conv3(x))
+        x = self.opool(x)
+        x = self.lin3d(x)
+
+        return x
+
+net=Net().cuda()
+
+out=net(X)
+
+def Myloss(output,target):
+    x=output
+    y=target
+    sz=output.shape
+    loss_all=torch.zeros([sz[0],sz[1]*sz[2]*sz[3]]).cuda()
+    l=0
+    for i in range(0,output.shape[1]):
+        for j in range(0, output.shape[2]):
+            for k in range(0, output.shape[3]):
+                x=output[:,i,j,k,:].cuda()
+                y=target[:,i,j,k,:].cuda()
+                #norm=x.norm(dim=-1)
+                #norm=norm.view(-1,1)
+                #norm=norm.expand(norm.shape[0],3)
+                #if norm >0:
+                #print(norm)
+                x=F.normalize(x)
+                loss=x*y
+                loss=loss.sum(dim=-1).abs()
+                #print(loss)
+                eps = 1e-6
+                loss[(loss - 1).abs() < eps] = 1.0
+                loss_all[:,l]=torch.arccos(loss)
+                #print(output)
+                l+=1
+    return loss_all.flatten().mean()
+
+#criterion = nn.MSELoss()
+#criterion=nn.SmoothL1Loss()
+#criterion=nn.CosineSimilarity()
+criterion=Myloss
+
+
+optimizer = optim.Adamax(net.parameters(), lr=1e-2)#, weight_decay=0.001)
+optimizer.zero_grad()
+scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=25, verbose=True)
+
+running_loss = 0
+
+train = torch.utils.data.TensorDataset(X, Y)
+trainloader = DataLoader(train, batch_size=1)
+
+for epoch in range(0, 20):
+    print(epoch)
+    for n, (inputs, targets) in enumerate(trainloader, 0):
+        # print(n)
+
+        optimizer.zero_grad()
+
+        #print(inputs.shape)
+        output = net(inputs.cuda())
+
+        loss = criterion(output, targets)
+        loss=loss.sum()
+        print(loss)
+        loss.backward()
+        #print(net.lin3d.weight[2,2,4,4,4,3])
+        #print(net.conv1.weight)
+        optimizer.step()
+        running_loss += loss.item()
+    else:
+        print(running_loss / len(trainloader))
+    # if i%N_train==0:
+    #    print('[%d, %5d] loss: %.3f' %
+    #          ( 1, i + 1, running_loss / 100))
+    scheduler.step(running_loss)
+    running_loss = 0.0
+
+
+
 
 
 
