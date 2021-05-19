@@ -7,6 +7,10 @@ from torch.nn import functional as F
 import torch
 import math
 import numpy as np
+from torch.nn import MaxPool2d
+from torch.nn import GroupNorm, Linear, ModuleList
+
+
 
 #need something that slides in 3d but hen takes 2d convolutions at each point
 
@@ -19,6 +23,12 @@ import numpy as np
     #now we have to slide the filter and extract the next 3,3,3 part of the input signal
         #this is the part where some clever falttening needs to used?
         #can go with simple loop
+
+
+
+
+
+
 
 class gConv3d(Module):
     def __init__(self, in_channels, out_channels, H, shells=None):
@@ -101,6 +111,28 @@ class gConv3d(Module):
                     out = out + d12.pad(temp, self.I, self.J, self.T)
         return out
 
+class lNetFromList(Module):
+    """
+    This class will give us a linear network from a list of filters
+    """
+    def __init__(self,filterlist,activationlist=None):
+        super(lNetFromList,self).__init__()
+        self.activationlist=activationlist
+        self.lins=[]
+        if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
+            self.activationlist=[None for i in range(0,len(filterlist)-1)]
+        for i in range(0,len(filterlist)-1):
+            self.lins.append(Linear(filterlist[i],filterlist[i+1]))
+        self.lins=ModuleList(self.lins)
+
+    def forward(self,x):
+        for idx,lin in enumerate(self.lins):
+            activation=self.activationlist[idx]
+            if activation == None:
+                x=lin(x)
+            else:
+                x=activation(lin(x))
+        return x
 
 class gConv2d(Module):
     def __init__(self, in_channels, out_channels, H, shells=None):
@@ -270,3 +302,62 @@ class gNetFromList(Module):
         for gConv in self.gConvs:
             x=gConv(x)
         return x
+
+
+
+class gConv5dFromList(gNetFromList):
+    def __init__(self,H,filterlist,shells,activationlist=None):
+        super(gConv5dFromList,self).__init__(H,filterlist,shells,activationlist=activationlist)
+
+    def forward(self,x):
+        #here x has shape [batch,Nin,Nin,Nin,Cin,h,w]
+        #this needs to flattened to [batch x Nin^3, Cin,h, w] and then fed through the net work
+        sz=x.shape
+        x=x.view([sz[0]*sz[1]*sz[2]*sz[3], sz[4],sz[5],sz[6]])
+        for gConv in self.gConvs:
+            x = gConv(x)
+        nsz=x.shape
+        return x.view(sz[0],sz[1],sz[2],sz[3],nsz[-3],nsz[-2],nsz[-1])
+
+class opool5d(Module):
+    def __init__(self,in_channels):
+        super(opool5d,self).__init__()
+        self.in_channels=in_channels
+        self.opool=opool(self.in_channels)
+
+    def forward(self,input):
+        sz=input.shape
+        input=input.view([sz[0]*sz[1]*sz[2]*sz[3], sz[4],sz[5],sz[6]])
+        input=self.opool.forward(input)
+        nsz=input.shape
+        return input.view([sz[0],sz[1],sz[2],sz[3],nsz[-3],nsz[-2],nsz[-1]])
+
+class maxpool5d(Module):
+    def __init__(self,kernel):
+        super(maxpool5d,self).__init__()
+        self.kernel=kernel
+        self.maxpool2d=MaxPool2d(kernel)
+
+    def forward(self,input):
+        sz=input.shape
+        input=input.view([sz[0]*sz[1]*sz[2]*sz[3], sz[4],sz[5],sz[6]])
+        input=self.maxpool2d(input)
+        nsz=input.shape
+        return input.view([sz[0],sz[1],sz[2],sz[3],nsz[-3],nsz[-2],nsz[-1]])
+
+class lNet5dFromList(Module):
+
+    def __init__(self,filterlist, activationlist=None):
+        super(lNet5dFromList,self).__init__()
+        self.filterlist = filterlist
+        self.activationlist = activationlist
+        self.lNet=lNetFromList(filterlist, activationlist)
+
+    def forward(self,input):
+        sz = input.shape
+        input = input.view([sz[0] * sz[1] * sz[2] * sz[3], sz[4]* sz[5]* sz[6]])
+        input=self.lNet(input)
+        nsz=input.shape
+        input=input.view([sz[0], sz[1], sz[2], sz[3], nsz[-1]])
+        input=input.permute(0,-1,1,2,3)
+        return input

@@ -1,30 +1,17 @@
 import torch
-import gPyTorch
-from gPyTorch import gConv2d
-from gPyTorch import gNetFromList
 from gPyTorch import opool
-from torch.nn import functional as F
 from torch.nn.modules.module import Module
-import dihedral12 as d12
 import numpy as np
-import diffusion
-import icosahedron
-from nibabel import load
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import random
 from torch.nn import GroupNorm, Linear, ModuleList
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
-from torch import nn
 from torch.utils.data import DataLoader
-import dihedral12 as d12
 from torch.nn import MaxPool2d
 from gPyTorch import gNetFromList
-import copy
-import time
-import nifti2traintest as ntt
 import pickle
 
 def path_from_modelParams(modelParams):
