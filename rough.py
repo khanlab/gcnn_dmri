@@ -13,10 +13,12 @@ import matplotlib.pyplot as plt
 from torch.nn.modules.module import Module
 from torch.nn import Linear
 from torch.nn import functional as F
+from torch.nn import ELU
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.nn import Conv3d
+import dihedral12 as d12
 
 from gPyTorch import (gConv5dFromList,opool5d, maxpool5d, lNet5dFromList)
 
@@ -24,45 +26,66 @@ from gPyTorch import (gConv5dFromList,opool5d, maxpool5d, lNet5dFromList)
 class Net(Module):
     def __init__(self):
         super(Net,self).__init__()
-        self.gconv=gConv5dFromList(5,[1,4,8,16],shells=1,activationlist=[F.relu,F.relu,F.relu])
-        self.opool=opool5d(16)
+        self.gconv=gConv5dFromList(5,[1,4,8,16,32],shells=1,activationlist=[ELU(),ELU(),ELU(),ELU()])
+        self.opool=opool5d(32)
         self.mxpool=maxpool5d([2,2])
-        self.lin1=lNet5dFromList([int(16*6*30/4),50],activationlist=[F.relu])
-        self.conv3d1 = Conv3d(50, 8, [3, 3, 3], padding=[1, 1, 1])
-        self.conv3d2 = Conv3d( 8, 3, [3, 3, 3], padding=[1, 1, 1])
+        self.lin1=lNet5dFromList([int(32*6*30/4),32,16,8],activationlist=[ELU(),ELU(),ELU()])
+        self.conv3d1 = Conv3d(8, 64, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d2 = Conv3d( 64,32, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d3 = Conv3d( 32, 16, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d4 = Conv3d(16, 3, [3, 3, 3], padding=[1, 1, 1])
+
 
     def forward(self,x):
         x=self.gconv(x)
         x=self.opool(x)
         x=self.mxpool(x)
-        x=self.lin1(x)
+        x=F.relu(self.lin1(x))
         x=F.relu(self.conv3d1(x))
-        x=self.conv3d2(x)
-
+        x=F.relu(self.conv3d2(x))
+        x= F.relu(self.conv3d3(x))
+        x=self.conv3d4(x)
         return(x)
 
 
 
 
 
-datapath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
-dtipath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/dti"
-outpath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
+# datapath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
+# dtipath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/dti"
+# outpath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
+
+
+datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+dtipath="./data/sub-100206/dtifit"
+outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+
 
 #ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
 #ext.splitNsave(9)
 
+I,J,T=d12.padding_basis(5)
+
 chnk=extract3dDiffusion.chunk_loader(outpath)
 X,Y=chnk.load(cut=100)
-X=1-X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
+X=X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
 
-Y=Y[:,:,:,:,4:7]
+X=X[:,:,:,:,:,I[0,:,:],J[0,:,:]]
+
+X[X==0]=1
+X=1-X
+X[X<0]=0
+X[np.isinf(X)]=0
+X[np.isnan(X)]=0
+
+#Y=Y[:,:,:,:,]
+
 
 inputs= np.moveaxis(X,1,-3)
-inputs= torch.from_numpy(inputs[0:20]).contiguous().cuda()
+inputs= torch.from_numpy(inputs[100:120]).contiguous().cuda()
 
 targets=np.moveaxis(Y,-1,1)
-targets=torch.from_numpy(targets[0:20]).contiguous().cuda()
+targets=torch.from_numpy(targets[100:120]).contiguous().cuda()
 
 
 def Myloss(output,target):
@@ -75,12 +98,15 @@ def Myloss(output,target):
         for j in range(0, output.shape[-2]):
             for k in range(0, output.shape[-1]):
                 x=output[:,:,i,j,k].cuda()
-                y=target[:,:,i,j,k].cuda()
+                y=target[:,4:7,i,j,k].cuda()
+                FA=target[:,0,i,j,k].cuda()
+                #FA[torch.isnan(FA)]=0
                 #norm=x.norm(dim=-1)
                 #norm=norm.view(-1,1)
                 #norm=norm.expand(norm.shape[0],3)
                 #if norm >0:
                 #print(norm)
+                #print(x)
                 x=F.normalize(x)
                 loss=x*y
                 loss=loss.sum(dim=-1).abs()
@@ -103,14 +129,14 @@ criterion=Myloss
 #
 optimizer = optim.Adamax(net.parameters(), lr=1e-2)#, weight_decay=0.001)
 optimizer.zero_grad()
-scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.6, patience=30, verbose=True)
+scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
 #
 running_loss = 0
 
 train = torch.utils.data.TensorDataset(inputs, targets)
 trainloader = DataLoader(train, batch_size=2)
 #
-for epoch in range(0, 150):
+for epoch in range(0, 10):
     print(epoch)
     for n, (inputs, target) in enumerate(trainloader, 0):
         # print(n)
@@ -139,8 +165,48 @@ for epoch in range(0, 150):
 #
 
 
+#use network to make prediction and put volume back together
+datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+dtipath="./data/sub-100206/dtifit"
+outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
 
 
+#ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
+#ext.splitNsave(9)
+
+# chnk=extract3dDiffusion.chunk_loader(outpath)
+# X,Y=chnk.load(cut=0)
+# X=1-X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
+#
+# inputs= np.moveaxis(X,1,-3)
+# #inputs= torch.from_numpy(inputs).contiguous().cuda()
+#
+# net=torch.load('net')
+#
+# batch_size=2
+# outp=np.zeros([len(inputs),3,9,9,9])
+# for i in range(0,len(inputs),batch_size):
+#     print(i)
+#     thisinput=torch.from_numpy(inputs[i:i+batch_size]).contiguous().cuda()
+#     outp[i:i+batch_size,:,:,:,:]=net(thisinput).detach().cpu()
+#     #test = net(thisinput).detach().cpu()
+#
+# #normalize the outs
+# diff=[]
+# FA=[]
+# for i in range(0,len(outp)):
+#     for a in range(0,9):
+#         for b in range(0,9):
+#             for c in range(0,9):
+#                 if Y[i,a,b,c,0]>0.1:
+#                     vec1=outp[i,:,a,b,c]
+#                     vec2=Y[i,a,b,c,4:7]
+#                     vec1=vec1/np.sqrt((vec1*vec1).sum())
+#                     diff.append(np.rad2deg( np.arccos(np.abs( (vec1*vec2).sum()) )))
+#                     FA.append(Y[i,a,b,c,0])
+#
+# diff=np.asarray(diff)
+# FA=np.asarray(FA)
 
 #def zeropadder(input):
 #     sz=input.shape

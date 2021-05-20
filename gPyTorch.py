@@ -289,6 +289,7 @@ class gNetFromList(Module):
     def __init__(self,H,filterlist,shells,activationlist=None):
         super(gNetFromList, self).__init__()
         self.gConvs=[]
+        self.gNorms=[]
         if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
             activationlist=[None for i in range(0,len(filterlist)-1)]
         for i in range(0,len(filterlist)-1):

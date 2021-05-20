@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from torch.nn import GroupNorm, Linear, ModuleList
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
 from torch.utils.data import DataLoader
