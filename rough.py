@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.nn import Conv3d
 import dihedral12 as d12
+import torch.nn as nn
 
 from gPyTorch import (gConv5dFromList,opool5d, maxpool5d, lNet5dFromList)
 
@@ -26,24 +27,24 @@ from gPyTorch import (gConv5dFromList,opool5d, maxpool5d, lNet5dFromList)
 class Net(Module):
     def __init__(self):
         super(Net,self).__init__()
-        self.gconv=gConv5dFromList(5,[1,4,8,16,32],shells=1,activationlist=[ELU(),ELU(),ELU(),ELU()])
-        self.opool=opool5d(32)
+        self.gconv=gConv5dFromList(11,[1,4,8],shells=1,activationlist=[ELU(),ELU(),ELU(),ELU()])
+        self.opool=opool5d(8)
         self.mxpool=maxpool5d([2,2])
-        self.lin1=lNet5dFromList([int(32*6*30/4),32,16,8],activationlist=[ELU(),ELU(),ELU()])
-        self.conv3d1 = Conv3d(8, 64, [3, 3, 3], padding=[1, 1, 1])
-        self.conv3d2 = Conv3d( 64,32, [3, 3, 3], padding=[1, 1, 1])
-        self.conv3d3 = Conv3d( 32, 16, [3, 3, 3], padding=[1, 1, 1])
-        self.conv3d4 = Conv3d(16, 3, [3, 3, 3], padding=[1, 1, 1])
+        self.lin1=lNet5dFromList([int(8*12*60/4),100,90,80,50,40],activationlist=[ELU(),ELU(),ELU(),ELU(),ELU()])
+        self.conv3d1 = Conv3d(40, 8, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d2 = Conv3d( 8,8, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d3 = Conv3d( 8, 4, [3, 3, 3], padding=[1, 1, 1])
+        self.conv3d4 = Conv3d(4, 3, [3, 3, 3], padding=[1, 1, 1])
 
 
     def forward(self,x):
         x=self.gconv(x)
         x=self.opool(x)
         x=self.mxpool(x)
-        x=F.relu(self.lin1(x))
-        x=F.relu(self.conv3d1(x))
-        x=F.relu(self.conv3d2(x))
-        x= F.relu(self.conv3d3(x))
+        x=self.lin1(x)
+        x=self.conv3d1(x)
+        x=self.conv3d2(x)
+        x=self.conv3d3(x)
         x=self.conv3d4(x)
         return(x)
 
@@ -56,120 +57,127 @@ class Net(Module):
 # outpath="/home/uzair/PycharmProjects/unfoldFourier/data/101006/Diffusion/Diffusion/"
 
 
+# datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+# dtipath="./data/sub-100206/dtifit"
+# outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+
 datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
 dtipath="./data/sub-100206/dtifit"
 outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
 
 
-#ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
-#ext.splitNsave(9)
+ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
+ext.splitNsave(9)
 
-I,J,T=d12.padding_basis(5)
-
-chnk=extract3dDiffusion.chunk_loader(outpath)
-X,Y=chnk.load(cut=100)
-X=X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
-
-X=X[:,:,:,:,:,I[0,:,:],J[0,:,:]]
-
-X[X==0]=1
-X=1-X
-X[X<0]=0
-X[np.isinf(X)]=0
-X[np.isnan(X)]=0
-
-#Y=Y[:,:,:,:,]
-
-
-inputs= np.moveaxis(X,1,-3)
-inputs= torch.from_numpy(inputs[100:120]).contiguous().cuda()
-
-targets=np.moveaxis(Y,-1,1)
-targets=torch.from_numpy(targets[100:120]).contiguous().cuda()
-
-
-def Myloss(output,target):
-    x=output
-    y=target
-    sz=output.shape
-    loss_all=torch.zeros([sz[0],sz[-3]*sz[-2]*sz[-1]]).cuda()
-    l=0
-    for i in range(0,output.shape[-3]):
-        for j in range(0, output.shape[-2]):
-            for k in range(0, output.shape[-1]):
-                x=output[:,:,i,j,k].cuda()
-                y=target[:,4:7,i,j,k].cuda()
-                FA=target[:,0,i,j,k].cuda()
-                #FA[torch.isnan(FA)]=0
-                #norm=x.norm(dim=-1)
-                #norm=norm.view(-1,1)
-                #norm=norm.expand(norm.shape[0],3)
-                #if norm >0:
-                #print(norm)
-                #print(x)
-                x=F.normalize(x)
-                loss=x*y
-                loss=loss.sum(dim=-1).abs()
-                #print(loss)
-                eps = 1e-6
-                loss[(loss - 1).abs() < eps] = 1.0
-                loss_all[:,l]=torch.arccos(loss)
-                #print(output)
-                l+=1
-    return loss_all.flatten().mean()
-
-net=Net().cuda()
-
-
-#criterion = nn.MSELoss()
-#criterion=nn.SmoothL1Loss()
-#criterion=nn.CosineSimilarity()
-criterion=Myloss
+# I,J,T=d12.padding_basis(11)
+#
+# chnk=extract3dDiffusion.chunk_loader(outpath)
+# X,Y=chnk.load(cut=100)
+# X=X.reshape((X.shape[0],1) + tuple(X.shape[1:]))
+#
+# X=X[:,:,:,:,:,I[0,:,:],J[0,:,:]]
 #
 #
-optimizer = optim.Adamax(net.parameters(), lr=1e-2)#, weight_decay=0.001)
-optimizer.zero_grad()
-scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
-#
-running_loss = 0
-
-train = torch.utils.data.TensorDataset(inputs, targets)
-trainloader = DataLoader(train, batch_size=2)
-#
-for epoch in range(0, 10):
-    print(epoch)
-    for n, (inputs, target) in enumerate(trainloader, 0):
-        # print(n)
-
-        optimizer.zero_grad()
-
-        #print(inputs.shape)
-        output = net(inputs.cuda())
-
-        loss = criterion(output, target)
-        loss=loss.sum()
-        print(loss)
-        loss.backward()
-        #print(net.lin3d.weight[2,2,4,4,4,3])
-        #print(net.conv1.weight)
-        optimizer.step()
-        running_loss += loss.item()
-    else:
-        print(running_loss / len(trainloader))
-    # if i%N_train==0:
-    #    print('[%d, %5d] loss: %.3f' %
-    #          ( 1, i + 1, running_loss / 100))
-    scheduler.step(running_loss)
-    running_loss = 0.0
+def plotter(X1,X2,i):
+    fig,ax=plt.subplots(2,1)
+    ax[0].imshow(1/X1[i, 0, 2, 2, 2, :, :])
+    ax[1].imshow(1/X2[i, 0, 2, 2, 2, :, :])
 #
 #
-
-
-#use network to make prediction and put volume back together
-datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
-dtipath="./data/sub-100206/dtifit"
-outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
-
+#
+#
+# Y=Y[:,:,:,:,4:7]
+#
+#
+#
+# inputs= np.moveaxis(X,1,-3)
+# inputs= torch.from_numpy(inputs[103:104]).contiguous().cuda().float()
+#
+# targets=np.moveaxis(Y,-1,1)
+# targets=torch.from_numpy(targets[103:104]).contiguous().cuda().float()
+#
+# def Myloss(output,target):
+#     x=output
+#     y=target
+#     sz=output.shape
+#     loss_all=torch.zeros([sz[0],sz[-3]*sz[-2]*sz[-1]]).cuda()
+#     l=0
+#     for i in range(0,output.shape[-3]):
+#         for j in range(0, output.shape[-2]):
+#             for k in range(0, output.shape[-1]):
+#                 x=output[:,:,i,j,k].cuda()
+#                 y=target[:,4:7,i,j,k].cuda()
+#                 FA=target[:,0,i,j,k].cuda().detach()
+#                 #FA[torch.isnan(FA)]=0
+#                 #norm=x.norm(dim=-1)
+#                 #norm=norm.view(-1,1)
+#                 #norm=norm.expand(norm.shape[0],3)
+#                 #if norm >0:
+#                 #print(norm)
+#                 #print(x)
+#                 x=F.normalize(x)
+#                 loss=x-y
+#                 loss=loss.sum(dim=-1).abs()
+#                 #print(loss)
+#                 #eps = 1e-6
+#                 #loss[(loss - 1).abs() < eps] = 1.0
+#                 #loss_all[:,l]=torch.arccos(loss)*(1-FA)
+#                 loss_all[:, l]=loss
+#                 l+=1
+#     return loss_all.flatten().mean()
+#
+# net=Net().cuda()
+#
+#
+# criterion = nn.MSELoss()
+# #criterion=nn.SmoothL1Loss()
+# #criterion=nn.CosineSimilarity()
+# #criterion=Myloss
+# #
+# #
+# optimizer = optim.Adamax(net.parameters(), lr=1e-3)#, weight_decay=0.001)
+# optimizer.zero_grad()
+# scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
+# #
+# running_loss = 0
+#
+# train = torch.utils.data.TensorDataset(inputs, targets)
+# trainloader = DataLoader(train, batch_size=2)
+# #
+# for epoch in range(0, 40):
+#     print(epoch)
+#     for n, (inputs, target) in enumerate(trainloader, 0):
+#         # print(n)
+#
+#         optimizer.zero_grad()
+#
+#         #print(inputs.shape)
+#         output = net(inputs.cuda())
+#
+#         loss = criterion(output, target)
+#         loss=loss.sum()
+#         print(loss)
+#         loss.backward()
+#         #print(net.lin3d.weight[2,2,4,4,4,3])
+#         #print(net.conv1.weight)
+#         optimizer.step()
+#         running_loss += loss.item()
+#     else:
+#         print(running_loss / len(trainloader))
+#     # if i%N_train==0:
+#     #    print('[%d, %5d] loss: %.3f' %
+#     #          ( 1, i + 1, running_loss / 100))
+#     scheduler.step(running_loss)
+#     running_loss = 0.0
+# #
+# #
+#
+#
+# #use network to make prediction and put volume back together
+# datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+# dtipath="./data/sub-100206/dtifit"
+# outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
+#
 
 #ext=extract3dDiffusion.extractor3d(datapath,dtipath,outpath)
 #ext.splitNsave(9)

@@ -47,19 +47,22 @@ class chunk_loader:
         files_dti=os.listdir(self.path+'dti_chunks/')
         X=[] #input
         Y=[] #output
+        S0=[]
         for idx,file in enumerate(files):
-            parse=re.split(r'[_.]',file)
-            percent=int(parse[-3])
-            if percent >= cut:
-                print('loading: '+ self.path+'data_chunks/'+file)
-                X.append(nib.load(self.path+'data_chunks/'+file).get_fdata())
-                thisstring=''
-                for par in range(2,len(parse)-2):
-                    thisstring=thisstring+"_"+parse[par]
-                print('loading: ' +self.path+'dti_chunks/'+'dti_all'+thisstring)
-                Y.append(nib.load(self.path+'dti_chunks/'+'dti_all'+thisstring+'.nii.gz').get_fdata())
-                print('\n')
-        return np.stack(X,axis=0), np.stack(Y,axis=0)
+            if 'data_flat' in file:
+                parse=re.split(r'[_.]',file)
+                percent=int(parse[-3])
+                if percent >= cut:
+                    print('loading: '+ self.path+'data_chunks/'+file)
+                    X.append(nib.load(self.path+'data_chunks/'+file).get_fdata())
+                    thisstring=''
+                    for par in range(2,len(parse)-2):
+                        thisstring=thisstring+"_"+parse[par]
+                    print('loading: ' +self.path+'dti_chunks/'+'dti_all'+thisstring)
+                    Y.append(nib.load(self.path+'dti_chunks/'+'dti_all'+thisstring+'.nii.gz').get_fdata())
+                    S0.append(nib.load(self.path+'data_chunks/data_S0'+thisstring+'.nii.gz').get_fdata())
+                    print('\n')
+        return np.stack(X,axis=0), np.stack(S0,axis=0), np.stack(Y,axis=0)
 
 
 class extractor3d:
@@ -80,7 +83,7 @@ class extractor3d:
         self.dti.load(pathprefix=self.dtipath)
 
         #ico stuff
-        self.ico = icosahedron.icomesh(m=4)
+        self.ico = icosahedron.icomesh(m=10)
         self.ico.get_icomesh()
         self.ico.vertices_to_matrix()
         self.diff.makeInverseDistInterpMatrix(self.ico.interpolation_mesh)
@@ -111,6 +114,7 @@ class extractor3d:
         h = H + 1
         N_chunks=chunksi*chunksj*chunksk
         N_flat = chunk_size * chunk_size * chunk_size
+        chunks_S0=np.zeros([N_chunks, chunk_size, chunk_size, chunk_size, len(self.diff.inds[0])])
         chunks_data = np.zeros([N_chunks, chunk_size, chunk_size, chunk_size, h, w])
         chunks_dti = np.zeros([N_chunks,chunk_size,chunk_size,chunk_size,13])
 
@@ -130,6 +134,7 @@ class extractor3d:
             for jj in range(min(j), max(j), chunk_size):
                 for kk in range(min(k), max(k), chunk_size):
                     flat = np.zeros([N_flat, 3, h, w])
+                    S0 = np.zeros([N_flat,len(self.diff.inds[0])])
                     print('Working on chunk id:' + str(chnk_ind))
                     il, jl, kl = np.meshgrid(np.arange(ii, ii + chunk_size), #these are for the larger image
                                              np.arange(jj, jj + chunk_size),
@@ -140,12 +145,21 @@ class extractor3d:
                     perc_filled=100*len(mask[mask>0])/len(mask)
                     fill=mask>0
                     if any(fill): #only evaluate at non-zero points
-                        S0, flat[fill,:,:,:], signal = self.diff.makeFlat(voxels[fill], self.ico, interp=self.interp)
+                        S0_temp, flat[fill,:,:,:], signal = self.diff.makeFlat(voxels[fill], self.ico,
+                                                                              interp=self.interp)
+                        S0_temp=np.asarray(S0_temp)
+                        S0[fill,:]=S0_temp[:,0,:]
+
                     chunks_data[chnk_ind, ip.flatten(), jp.flatten(), kp.flatten(), :, :] = flat[:, 0, :, :]
                     chunk_nii=nib.Nifti1Image(chunks_data[chnk_ind,:,:,:,:,:],self.diff.vol.affine)
-                    #np.save(self.outpath+'data_'+str(chnk_ind)+'.npy')
                     nib.save(chunk_nii,self.outpath+'data_chunks/data_flat_'+sizestring+str(chnk_ind)+'_'+str(int(
                         perc_filled))+'.nii.gz')
+
+                    chunks_S0[chnk_ind, ip.flatten(), jp.flatten(), kp.flatten(), :] = S0[:, :]
+                    chunk_nii=nib.Nifti1Image(chunks_S0[chnk_ind,:,:,:,:],self.diff.vol.affine)
+                    nib.save(chunk_nii,self.outpath+'data_chunks/data_S0_'+sizestring+str(chnk_ind)+'_'+str(int(
+                        perc_filled))+'.nii.gz')
+
                     #chunks_dti[chnk_ind,il.flatten(),jl.flatten(),kl.flatten(),:]=dti_to_array_Y(self.dti,voxels)
                     chunks_dti[chnk_ind,ip.flatten(), jp.flatten(), kp.flatten(), :] = dti_to_array_Y(self.dti, voxels)
                     chunk_nii = nib.Nifti1Image(chunks_dti[chnk_ind, :, :, :, :], self.diff.vol.affine)

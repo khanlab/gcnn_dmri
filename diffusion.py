@@ -207,10 +207,15 @@ class diffVolume():
                 #stripy interp
                 #print(S0)
                 #print(np.mean(S0))
-                if interp =='nearest': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,zdata=Stwice/np.mean(S0_per_point))
-                if interp =='linear': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
-                if interp =='cubic': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=3,zdata=Stwice/np.mean(S0_per_point))
-                if interp =='inverse_distance': temp=np.matmul(self.interpolation_matrices[sid-1],Stwice/np.mean(S0_per_point)) #inverse distance
+                if interp =='nearest': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,
+                                                                                     zdata=Stwice)#/np.mean(
+                # S0_per_point))
+                if interp =='linear': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,
+                                                                                    zdata=Stwice)#/np.mean(
+                # S0_per_point))
+                if interp =='cubic': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=3,
+                                                                                   zdata=Stwice)#/np.mean(S0_per_point))
+                if interp =='inverse_distance': temp=np.matmul(self.interpolation_matrices[sid-1],Stwice)#/np.mean(S0_per_point)) #inverse distance
                 
                 new_temp=np.zeros(len(ico_lats))
                 for t in range(0,len(ico_lats)):

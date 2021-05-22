@@ -9,7 +9,7 @@ import math
 import numpy as np
 from torch.nn import MaxPool2d
 from torch.nn import GroupNorm, Linear, ModuleList
-
+from torch.nn import Conv3d
 
 
 #need something that slides in 3d but hen takes 2d convolutions at each point
@@ -162,15 +162,15 @@ class gConv2d(Module):
         #initialize weight basis if not deep
         if self.deep==0:
             self.weight = Parameter(Tensor(out_channels, in_channels, self.kernel_size))
-            self.basis_e_h = d12.basis_expansion(self.deep).detach() #this can be at net level also
+            self.basis_e_h = d12.basis_expansion(self.deep)#.detach() #this can be at net level also
             self.basis_e_t = None
 
         # initialize weight basis if deep
         elif self.deep == 1:  # and (in_channels % 12)==0:
             self.weight = Parameter(Tensor(out_channels, in_channels, 12, self.kernel_size))
             self.basis_e_h, self.basis_e_t = d12.basis_expansion(self.deep) #this can be at the net level also
-            self.basis_e_h=self.basis_e_h.detach()
-            self.basis_e_t=self.basis_e_t.detach()
+            self.basis_e_h=self.basis_e_h#.detach()
+            self.basis_e_t=self.basis_e_t#.detach()
 
         self.bias = Parameter(Tensor(out_channels))
         self.bias_basis = d12.bias_basis(out_channels)
@@ -362,3 +362,5 @@ class lNet5dFromList(Module):
         input=input.view([sz[0], sz[1], sz[2], sz[3], nsz[-1]])
         input=input.permute(0,-1,1,2,3)
         return input
+
+#need something
