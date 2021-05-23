@@ -14,6 +14,79 @@ Functions that allow us to load training and test data from nifti files
 
 #TODO: need something here that loads voxels from many different subjects. For example 5000 voxels from 10 subjects
 
+
+def loadDownUp(downdatapath,updatapath,N_train,H=11,all=None,interp='inverse_distance'):
+    """
+    Function to create training data for upsampling diffusion signal
+    """
+    def list_to_array_X(flats):
+    # convert the lists to arrays and also normalize the data to make attenutations brighter
+        N = len(flats)
+        shells = len(flats[0])
+        h = len(flats[0][0])
+        w = len(flats[0][0][0])
+        out = np.zeros([N, shells, h, w])
+        for p in range(0, N):
+            for s in range(0, shells):
+                temp = copy.deepcopy(flats[p][s][I[0,:,:],J[0,:,:]])
+                out[p, s, :, :]=temp #notice no normalizaton applied for now
+        return out
+
+    # load down diffusion data
+    diff_down = diffusion.diffVolume()
+    diff_down.getVolume(downdatapath)
+    diff_down.shells()
+    diff_down.makeBvecMeshes()
+
+    # load up diffusion data
+    diff_up = diffusion.diffVolume()
+    diff_up.getVolume(updatapath)
+    diff_up.shells()
+    diff_up.makeBvecMeshes()
+
+    # get the icosahedron ready
+    ico = icosahedron.icomesh(m=H-1)
+    ico.get_icomesh()
+    ico.vertices_to_matrix()
+    diff_down.makeInverseDistInterpMatrix(ico.interpolation_mesh)
+    diff_up.makeInverseDistInterpMatrix(ico.interpolation_mesh)
+
+    # these are all the voxels
+    i, j, k = np.where(diff_down.mask.get_fdata() == 1)
+    # i, j, k = np.where(dti.FA.get_fdata() > 0.3)
+    if all == True:
+        i, j, k = np.where(diff_down.mask.get_fdata() == 1)
+    voxels = np.asarray([i, j, k]).T
+
+    if all == True: #pick all?
+        training_inds=np.arange(0,len(i))
+    else:
+        training_inds=random.sample(range(0,len(i)),N_train)
+
+    train_voxels = np.asarray([i[training_inds], j[training_inds], k[training_inds]]).T
+
+    I, J, T = d12.padding_basis(ico.m + 1)
+
+    if all==None:
+        S0_down_train, flat_down_train, signal_down_train = diff_down.makeFlat(train_voxels, ico, interp=interp)
+        S0_up_train, flat_up_train, signal_up_train = diff_up.makeFlat(train_voxels, ico, interp=interp)
+        flat_down_train=list_to_array_X(flat_down_train)
+        flat_up_train = list_to_array_X(flat_up_train)
+        S0_down_train=np.asarray(S0_down_train)
+        S0_up_train=np.asarray(S0_up_train)
+
+        return S0_down_train,flat_down_train,S0_up_train,flat_up_train
+    else:
+        S0_down_train, flat_down_train, signal_down_train = diff_down.makeFlat(train_voxels, ico, interp=interp)
+        flat_down_train = list_to_array_X(flat_down_train)
+        S0_down_train = np.asarray(S0_down_train)
+        return S0_down_train,flat_down_train
+
+
+
+
+
+
 def load(datapath,dtipath,N_train,N_test=0,N_valid=0,all=None,interp='inverse_distance'):
     """
     :param path: path of diffusion and dti data
