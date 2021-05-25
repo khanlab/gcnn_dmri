@@ -8,7 +8,7 @@ import nifti2traintest
 
 N_train = sys.argv[1]
 diffpath = sys.argv[2]
-#dtipath = sys.argv[3]
+dtipath = sys.argv[3]
 #outpath = sys.argv[4] #this should be upto subject and then loop over each bvec downsample
 #downdatapath=sys.argv[2]
 #updatapath=sys.argv[3]
@@ -23,7 +23,7 @@ for cut in cuts:
     uppath = diffpath + '/' + str(cuts[-1]) + '/'
     print(' down path is ',downpath)
     print(' up path is ', uppath)
-    S0X,X,S0Y,Y=nifti2traintest.loadDownUp(downpath,uppath,int(N_train))
+    S0X,X,S0Y,Y=nifti2traintest.loadDownUp(downpath,uppath,dtipath,int(N_train))
 
     np.save(downpath + '/S0X_train_' + str(N_train) + '.npy', S0X)
     np.save(downpath+'/X_train_'+str(N_train)+'.npy',X)

@@ -1,198 +1,134 @@
-import extract3dDiffusion
-import gPyTorch
-import dihedral12 as d12
-import matplotlib.pylab as plt
 import torch
-import icosahedron
-#from mayavi import mlab
-import stripy
-import diffusion
-from joblib import Parallel, delayed
-import numpy as np
-import time
 import gPyTorch
-import torch
-import extract3dDiffusion
-import os
-import matplotlib.pyplot as plt
-from torch.nn.modules.module import Module
-from torch.nn import Linear
+from gPyTorch import gConv2d
+from gPyTorch import gNetFromList
+from gPyTorch import opool
 from torch.nn import functional as F
-from torch.nn import ELU
+from torch.nn.modules.module import Module
+import dihedral12 as d12
+import numpy as np
+import diffusion
+import icosahedron
+from nibabel import load
+import matplotlib.pyplot as plt
+import random
+from torch.nn import GroupNorm, Linear, ModuleList, BatchNorm2d
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader
 import torch.optim as optim
-from torch.nn import Conv3d
-import torch.nn as nn
+from torch import nn
+from torch.utils.data import DataLoader
+import dihedral12 as d12
+from torch.nn import MaxPool2d
+import copy
+#from numpy import load
+import time
+import nifti2traintest as ntt
+import training
+from gPyTorch import gNetFromList
+from training import lNetFromList
 import os
+from sklearn import preprocessing
+import sys
 import nifti2traintest
 
-def zscore(Xtrain):
-    #Xtrain = 1-Xtrain
-    #return Xtrain
-    Xtrain_mean = Xtrain.mean(axis=0)
-    Xtrain_std = Xtrain.std(axis=0)
-    return (Xtrain - Xtrain_mean)/Xtrain_std
 
-def preproc(X6,S06,X12,S012):
-    for i in range(0,len(X12)):
-        for a in range(0,X6.shape[1]):
-            for b in range(0, X6.shape[2]):
-                for c in range(0, X6.shape[3]):
-                    S0mean=S012[i,a,b,c].mean()
-                    if S0mean==0:
-                        print('zero mean encountered')
-                        print(S012[i,a,b,c])
-                        S0mean=1
-                    X6[i,a,b,c]=X6[i,a,b,c]/S0mean
-                    X12[i, a, b, c] = X12[i, a, b, c] / S0mean
-    return X6,X12
+def preproc(X,S0):
+    #X will have dimensions [N,shells,h,w]
+    #S0 will have dimensions [N,shells, # of b0 measurements]
+    for i in range(0,X.shape[0]):
+        for s in range(0,S0.shape[1]):
+            Smean=S0[i,s,:].mean()
+            if Smean ==0: 
+                print(S0[i,s,:])
+                print('zero mean encountered')
+                Smean = X[i,s,:,:].max() # not sure if the this is the best appraoch 
+            X[i,s,:,:]=X[i,s,:,:]/Smean
+    #we need to standardize #take mean and std over all voxels (included diffusion directions)
+    X = (X-X.mean())/X.std()
+    #X=torch.from_numpy(X).contiguous().cuda().float()
+    return X
 
+def load_preproc(path,max): #max is how many you want to take 
+    X=np.load(path+'X_train_20000.npy')[0:max]
+    S0X=np.load(path+'S0X_train_20000.npy')[0:max]
+    Y=np.load(path+'Y_train_20000.npy')[0:max]
+    S0Y=np.load(path+'S0Y_train_20000.npy')[0:max]
+    
+    X=preproc(X,S0X)
+    Y=preproc(Y,S0Y)
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-
-#load 6 dirs
-datapath="/home/uzair/PycharmProjects/dgcnn/data/6/"
-dtipath="./data/sub-100206/dtifit"
-outpath="/home/uzair/PycharmProjects/dgcnn/data/6/"
-
-chnk=extract3dDiffusion.chunk_loader(outpath)
-X6t,S06,Y6=chnk.load(cut=100)
-
-#load 12 dirs
+    return X,Y
 
 
-datapath="/home/uzair/PycharmProjects/dgcnn/data/90/"
-dtipath="./data/sub-100206/dtifit"
-outpath="/home/uzair/PycharmProjects/dgcnn/data/90/"
+basepath = sys.argv[1] #path where the subjects are
+subjectfile= sys.argv[2] #path where the subject list file is
+bvec = sys.argv[3] #how many bvectors
 
-chnk=extract3dDiffusion.chunk_loader(outpath)
-X12t,S012,Y12=chnk.load(cut=100)
-
-X6,X12=preproc(X6t,S06,X12t,S012)
-
-I,J,T=d12.padding_basis(11)
-
-X6=X6[:,:,:,:,I[0,:,:],J[0,:,:]]
-X12=X12[:,:,:,:,I[0,:,:],J[0,:,:]]
-
-targets=X12-X6
-
-inputs=X6[0:10]
-targets=targets[0:10]
-
-inputs=inputs.reshape((inputs.shape[0],1)+tuple(inputs.shape[1:]))
-targets=targets.reshape((targets.shape[0],1)+tuple(targets.shape[1:]))
+#get the subjectlist 
+with open(subjectfile) as f:
+    subjects=f.read().splitlines()
 
 
 
-inputs=torch.from_numpy(inputs).contiguous()
-targets=torch.from_numpy(targets).contiguous()
+max=10000
+#stack all the subjects into one Xtrain, S0X, Ytrain, S0Y
+X_train, Y_train= load_preproc(basepath+'/'+subjects[0]+'/'+bvec+'/',max)
+for s in range(1,len(subjects)):
+    X_temp, Y_temp= load_preproc(basepath+'/'+subjects[s]+'/'+bvec+'/',max)
+    X_train = np.row_stack((X_train,X_temp))
+    Y_train = np.row_stack((Y_train,Y_temp))
+    
+#S0X_train, X_train,S0Y_train,Y_train = nifti2traintest.loadDownUp(sys.argv[1],sys.argv[2],sys.argv[3],5000)
 
-inputs=inputs.float().cuda()
-targets=targets.float().cuda()
-
-inputs=inputs.view(-1,1,12,60)
-targets=targets.view(-1,1,12,60)
-
-
-class Net(Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.gconv=gPyTorch.gNetFromList(11,[1,16,16,16,16,16,16,16,1],shells=1,activationlist= [F.relu,F.relu,F.relu,
-                                                                                             F.relu,F.relu,F.relu,
-                                                                                                 F.relu,
-                                                                                       None])
-        self.opool=gPyTorch.opool(1)
-
-
-    def forward(self,x):
-        x=self.gconv(x)
-        x=self.opool(x)
-
-        return x
-
-
-net=Net().cuda()
-
-
-criterion = nn.MSELoss()
-#criterion=nn.SmoothL1Loss()
-#criterion=nn.CosineSimilarity()
-#criterion=Myloss
-
-
-optimizer = optim.Adamax(net.parameters(), lr=1e-2)#, weight_decay=0.001)
-optimizer.zero_grad()
-scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
+#print(X_train.shape,S0X_train.shape)
 
 
 
-running_loss = 0
+#X=preproc(X_train,S0X_train)
+#Y=preproc(Y_train,S0Y_train)
 
-train = torch.utils.data.TensorDataset(inputs, targets)
-trainloader = DataLoader(train, batch_size=16)
+X=torch.from_numpy(X_train).contiguous().cuda().float()
+Y=torch.from_numpy(Y_train).contiguous().cuda().float()
 
-train_loader_iter = iter(trainloader)
-imgs, labels = next(train_loader_iter)
+#X,Y=preproc(X_train,S0X_train,Y_train,S0Y_train)
 
-for epoch in range(0, 100):
-    print(epoch)
-    for n, (input, target) in enumerate(trainloader, 0):
-        # print(n)
-
-        optimizer.zero_grad()
-
-        output = net(input.cuda())
-
-        loss = criterion(output, target)
-        loss=loss.sum()
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item()
-    else:
-        print(running_loss / len(trainloader))
-    # if i%N_train==0:
-    #    print('[%d, %5d] loss: %.3f' %
-    #          ( 1, i + 1, running_loss / 100))
-    scheduler.step(running_loss)
-    running_loss = 0.0
-
-inputs=X6[300:310]
-targets=X12-X6
-targets=targets[300:310]
-upsample=X12[300:310]
-
-inputs=inputs.reshape((inputs.shape[0],1)+tuple(inputs.shape[1:]))
-targets=targets.reshape((targets.shape[0],1)+tuple(targets.shape[1:]))
-upsample=upsample.reshape((upsample.shape[0],1)+tuple(upsample.shape[1:]))
+print(X.shape,Y.shape)
 
 
-inputs=torch.from_numpy(inputs).contiguous()
-targets=torch.from_numpy(targets).contiguous()
-upsample=torch.from_numpy(upsample).contiguous()
-
-inputs=inputs.float().cuda()
-targets=targets.float().cuda()
-
-inputs=inputs.view(-1,1,12,60)
-targets=targets.view(-1,1,12,60)
-upsample=upsample.view(-1,1,12,60)
+#network stuff
+H = 11
+h = 5 * (H + 1)
+w =  H + 1
+Ntrain=len(X_train)
 
 
-out=net(inputs[0:4])+inputs[0:4]
+gfilterlist=[1,16,16,16,16,16,16,1]
+gactivationlist=[F.relu for i in range(0,len(gfilterlist)-1)]
+gactivationlist[-1]=None
 
-for i in range(0,4):
-    fig,ax=plt.subplots(3)
-    ax[0].imshow(inputs[i,0].detach().cpu())
-    ax[1].imshow(out[i,0].detach().cpu())
-    ax[2].imshow(upsample[i, 0].detach().cpu())
-    #ax[3].imshow(targets[i,0].detach().cpu())
+modelParams={'H':H,
+             'shells':1,
+             'gfilterlist': gfilterlist,
+             'linfilterlist': None,
+             'gactivationlist': gactivationlist ,
+             'lactivationlist': None,
+             'loss': nn.MSELoss(),
+             'bvec_dirs': bvec,
+             'batch_size': 16,
+             'lr': 1e-2,
+             'factor': 0.65,
+             'Nepochs': 200,
+             'patience': 20,
+             'Ntrain': Ntrain,
+             'Ntest': 1,
+             'Nvalid': 1,
+             'interp': 'inverse_distance',
+             'basepath': '/home/u2hussai/scratch/dtitraining/networks/',
+             'type': 'residual',
+             'misc':'residual'
+            }
 
-
-def plotter(X1,X2,i):
-    fig,ax=plt.subplots(2,1)
-    ax[0].imshow(X1[i, 2, 2, 2, :, :])
-    ax[1].imshow(X2[i, 2, 2, 2, :, :])
-
-
+trnr=training.trainer(modelParams,X,Y-X)
+trnr.makeNetwork()
+trnr.save_modelParams()
+trnr.train()

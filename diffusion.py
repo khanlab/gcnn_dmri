@@ -295,15 +295,20 @@ class diffVolume():
         for c,cut in enumerate(cuts):
             print('downsampling with '+ str(cut)+ ' directions' )
             diffout=np.zeros(self.vol.shape[0:3] +(cut+bval_inds[c],))
+            #S0_mean=np.zeros(self.vol.shape[0:3])
             print(diffout.shape)
             diffout[:,:,:,0:bval_inds[c]]=self.vol.get_fdata()[:,:,:,self.inds[0][0:bval_inds[c]]] #increae b0 steadily also
             diffout[:,:,:,bval_inds[c]:]=self.vol.get_fdata()[:,:,:,self.inds[1][0:cut]]
             path = basepath + '/' + subjectid + '/' + str(cut)
+            S0_mean=np.copy(diffout[:,:,:,0:bval_inds[c]])
+            S0_mean=S0_mean.mean(-1)
             if not os.path.exists(path):
                 os.makedirs(path)
             diffout=nib.Nifti1Image(diffout,self.vol.affine)
             nib.save(diffout,path + "/data.nii.gz")
             nib.save(self.mask , path+ "/nodif_brain_mask.nii.gz")
+            S0_mean=nib.Nifti1Image(S0_mean, self.vol.affine)
+            nib.save(S0_mean,path+'/S0mean.nii.gz')
 
             fbval = open(path + '/bvals', "w")
             for i in range(0,bval_inds[c]):

@@ -34,11 +34,13 @@ def path_from_modelParams(modelParams):
         path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[1]
     except:
         path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[0]
-    path = path + '_linlayers-' + array2str(modelParams['linfilterlist'])
-    try:
-        path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[1]
-    except:
-        path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[0]
+    if modelParams['linfilterlist'] != None:
+        print(modelParams['linfilterlist'])
+        path = path + '_linlayers-' + array2str(modelParams['linfilterlist'])
+        try:
+            path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[1]
+        except:
+            path = path + '_lactivation0-' + str(modelParams['lactivationlist'][0].__str__()).split()[0]
     path = path + '_' + str(modelParams['misc'])
 
     return modelParams['basepath']+ path
@@ -108,10 +110,24 @@ class gnet(Module):
 
         return x
 
+class residualnet(Module):
+    def __init__(self,gfilterlist,shells,H,gactivationlist=None):
+        super(residualnet,self).__init__()
+        self.gfilterlist=gfilterlist
+        self.gactivationlist=gactivationlist
+        self.shells=shells
+        self.H=H
+        self.gConvs=gNetFromList(self.H,self.gfilterlist,shells,activationlist=self.gactivationlist)
+        self.opool = opool(self.gfilterlist[-1])
 
+    def forward(self,x):
+        x=self.gConvs(x)
+        x=self.opool(x)
+
+        return x
 
 class trainer:
-    def __init__(self,modelParams,Xtrain,Ytrain):
+    def __init__(self,modelParams,Xtrain=None,Ytrain=None):
         """
         Class to create and train networks
         :param modelParams: A dict with all network parameters
@@ -124,10 +140,14 @@ class trainer:
         self.net=[]
 
     def makeNetwork(self):
-        self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
-                        self.modelParams['shells'],self.modelParams['H'],
-                        self.modelParams['lactivationlist'],
-                        self.modelParams['gactivationlist'])
+        if self.modelParams['misc']=='residual':
+            self.net = residualnet(self.modelParams['gfilterlist'],self.modelParams['shells'],self.modelParams['H'],
+                                   self.modelParams['gactivationlist'])
+        else:
+            self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
+                            self.modelParams['shells'],self.modelParams['H'],
+                            self.modelParams['lactivationlist'],
+                            self.modelParams['gactivationlist'])
         self.net = self.net.cuda()
 
     def train(self):

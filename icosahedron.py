@@ -28,6 +28,9 @@ class icomesh:
         self.interpolation_mesh=[]
         self.antipodals=[]
         self.six_direction_mesh=[] #its actually 12 directions with antipodal points having the same signal
+        self.X_in_grid=[]
+        self.Y_in_grid=[]
+        self.Z_in_grid=[]
 
     def get_icomesh(self):
         self.vertices.extend([Vec(0.894427,0.000000,0.447214),
@@ -164,6 +167,41 @@ class icomesh:
             dist, id= self.interpolation_mesh.nearest_vertices(lon,lat,1)
             antipodals[i]=int(id[0][0])
         self.antipodals=antipodals
+
+
+    def grid2xyz(self):
+        """
+        Function that gives X,Y,Z coordinates on icosahedron flat grid
+        """
+        H=self.m+1
+        w=5*(H+1)
+        h=H+1
+        self.X_in_grid = np.zeros([h,w])
+        self.Y_in_grid = np.zeros([h,w])
+        self.Z_in_grid = np.zeros([h,w])
+        top_faces=[[1,2],[5,6],[9,10],[13,14],[17,18]]
+        for c in range(0,5):
+            face = top_faces[c]
+            for top_bottom in face:
+                i=self.i_list[top_bottom]
+                j=self.i_list[top_bottom]
+                vecs=self.face_list[top_bottom]
+                x=[]
+                y=[]
+                z=[]
+                for vec in vecs:
+                    x.append(vec[0])
+                    y.append(vec[1])
+                    z.append(vec[2])
+                i=np.asarray(i).astype(int)
+                j=np.asarray(c*h+j+1).astype(int)
+                self.X_in_grid[i,j]=x
+                self.Y_in_grid[i,j]=y
+                self.Z_in_grid[i,j]=z
+            #fill out northpole
+            self.X_in_grid[0,c*h+1]=0
+            self.Y_in_grid[0,c*h+1]=0
+            self.Z_in_grid[0,c*h+1]=1
 
     # def plot_icosohedron(self,maxface=22):
     #     """
