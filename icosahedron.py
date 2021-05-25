@@ -181,10 +181,12 @@ class icomesh:
         self.Z_in_grid = np.zeros([h,w])
         top_faces=[[1,2],[5,6],[9,10],[13,14],[17,18]]
         for c in range(0,5):
+            print(c)
             face = top_faces[c]
             for top_bottom in face:
+                print(top_bottom)
                 i=self.i_list[top_bottom]
-                j=self.i_list[top_bottom]
+                j=self.j_list[top_bottom]
                 vecs=self.face_list[top_bottom]
                 x=[]
                 y=[]
@@ -193,15 +195,16 @@ class icomesh:
                     x.append(vec[0])
                     y.append(vec[1])
                     z.append(vec[2])
+                print(x)
                 i=np.asarray(i).astype(int)
                 j=np.asarray(c*h+j+1).astype(int)
+                print(i)
+                print(j)
                 self.X_in_grid[i,j]=x
                 self.Y_in_grid[i,j]=y
-                self.Z_in_grid[i,j]=z
-            #fill out northpole
-            self.X_in_grid[0,c*h+1]=0
-            self.Y_in_grid[0,c*h+1]=0
-            self.Z_in_grid[0,c*h+1]=1
+                self.Z_in_grid[i,j]=z  #fill out northpole
+                print(self.X_in_grid[:,c*h:(c+1)*h])
+
 
     # def plot_icosohedron(self,maxface=22):
     #     """

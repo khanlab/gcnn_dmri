@@ -1,12 +1,18 @@
-import residualPrediction
+import icosahedron
 
-inputpath='/home/u2hussai/scratch/dtitraining/prediction/sub-518746/6/'
-netpath='/home/u2hussai/scratch/dtitraining/networks/bvec-dirs-6_type-residual_Ntrain-10000_Nepochs-200_patience-20_factor-0.65_lr-0.01_batch_size-16_interp-inverse_distance_glayers-1-8-8-8-8-8-8-1_gactivation0-relu_residual'
-
-redPred=residualPrediction.resPredictor(inputpath,netpath)
-
-redPred.predict()
-redPred.makeNifti(inputpath,11)
+ico=icosahedron.icomesh(m=4)
+ico.get_icomesh()
+ico.vertices_to_matrix()
+ico.grid2xyz()
+# import residualPrediction
+#
+# inputpath='/home/u2hussai/scratch/dtitraining/prediction/sub-518746/6/'
+# netpath='/home/u2hussai/scratch/dtitraining/networks/bvec-dirs-6_type-residual_Ntrain-10000_Nepochs-200_patience-20_factor-0.65_lr-0.01_batch_size-16_interp-inverse_distance_glayers-1-8-8-8-8-8-8-1_gactivation0-relu_residual'
+#
+# redPred=residualPrediction.resPredictor(inputpath,netpath)
+#
+# redPred.predict()
+# redPred.makeNifti(inputpath,11)
 
 # import nifti2traintest
 # import matplotlib.pyplot as plt
