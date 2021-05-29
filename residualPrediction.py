@@ -85,19 +85,26 @@ class resPredictor:
         N=len(basis[basis==1])+1
         print('Number of bdirs is: ', N)
 
-        bvals=np.zeros(N)
-        x_bvecs=np.zeros(N)
-        y_bvecs=np.zeros(N)
-        z_bvecs=np.zeros(N)
+        N_random=101
+        rng=np.random.default_rng()
+        inds=rng.choice(N-2,size=N_random,replace=False)+1
+        inds[0]=0
 
-        x_bvecs[1:]=self.ico.X_in_grid[basis==1].flatten()
-        y_bvecs[1:]=self.ico.Y_in_grid[basis==1].flatten()
-        z_bvecs[1:]=self.ico.Z_in_grid[basis==1].flatten()
+        bvals=np.zeros(N_random)
+        x_bvecs=np.zeros(N_random)
+        y_bvecs=np.zeros(N_random)
+        z_bvecs=np.zeros(N_random)
+
+        x_bvecs[1:]=self.ico.X_in_grid[basis==1].flatten()[inds[1:]]
+        y_bvecs[1:]=self.ico.Y_in_grid[basis==1].flatten()[inds[1:]]
+        z_bvecs[1:]=self.ico.Z_in_grid[basis==1].flatten()[inds[1:]]
         
         bvals[1:]=1000
 
+
+
         sz=self.diff.vol.get_fdata().shape
-        diff_out=np.zeros([sz[0],sz[1],sz[2],N])
+        diff_out=np.zeros([sz[0],sz[1],sz[2],N_random])
         
         diff_out[:,:,:,0]=1 #b0 
         i, j, k = np.where(self.diff.mask.get_fdata() == 1)
@@ -106,7 +113,7 @@ class resPredictor:
             signal = signal[basis==1].flatten()
             # print(diff_out.shape)
             # print(signal.shape)
-            diff_out[i[p],j[p],k[p],1:] = signal
+            diff_out[i[p],j[p],k[p],1:] = signal[inds[1:]]
         
         diff_out=nib.Nifti1Image(diff_out,self.diff.vol.affine)
         nib.save(diff_out,path+'/data_network.nii.gz')
@@ -123,8 +130,8 @@ class resPredictor:
         for y in y_bvecs:
             fbvecs.write(str(y)+ ' ')
         fbvecs.write('\n')
-        for y in y_bvecs:
-            fbvecs.write(str(y)+ ' ')
+        for z in z_bvecs:
+            fbvecs.write(str(z)+ ' ')
         fbvecs.write('\n')
 
 

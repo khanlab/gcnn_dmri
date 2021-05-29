@@ -39,6 +39,10 @@ def dti_to_array_Y(dti, voxels):  # this will need to made more general
 
     return out
 
+
+
+
+
 class chunk_loader:
     def __init__(self,path):
         self.path = path
