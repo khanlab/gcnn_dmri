@@ -1,19 +1,33 @@
-#import icosahedron
+import icosahedron
+import diffusion
+import numpy as np
 
-#ico=icosahedron.icomesh(m=4)
-#ico.get_icomesh()
-#ico.vertices_to_matrix()
-#ico.grid2xyz()
+diff=diffusion.diffVolume('./data/6')
+ico=icosahedron.icomesh(m=10)
+diff.makeInverseDistInterpMatrix(ico.interpolation_mesh)
 
-import residualPrediction
+i,j,k = np.where(diff.mask.get_fdata()>0)
+voxels=np.asarray([i,j,k]).T
+#diff.makeFlat(voxels[0:1000],ico)
 
-inputpath='/home/u2hussai/scratch/dtitraining/prediction/sub-518746/6/'
-netpath='/home/u2hussai/scratch/dtitraining/networks/bvec-dirs-6_type-residual_Ntrain-100000_Nepochs-200_patience-20_factor-0.65_lr-0.01_batch_size-16_interp-inverse_distance_glayers-1-16-16-16-16-16-16-1_gactivation0-relu_residual'
+out=diff.makeFlat(voxels,ico)
+
+# #import icosahedron
 #
-redPred=residualPrediction.resPredictor(inputpath,netpath)
+# #ico=icosahedron.icomesh(m=4)
+# #ico.get_icomesh()
+# #ico.vertices_to_matrix()
+# #ico.grid2xyz()
 #
-redPred.predict()
-redPred.makeNifti(inputpath,11)
+# import residualPrediction
+#
+# inputpath='/home/u2hussai/scratch/dtitraining/prediction/sub-518746/6/'
+# netpath='/home/u2hussai/scratch/dtitraining/networks/bvec-dirs-6_type-residual_Ntrain-100000_Nepochs-200_patience-20_factor-0.65_lr-0.01_batch_size-16_interp-inverse_distance_glayers-1-16-16-16-16-16-16-1_gactivation0-relu_residual'
+# #
+# redPred=residualPrediction.resPredictor(inputpath,netpath)
+# #
+# redPred.predict()
+# redPred.makeNifti(inputpath,11)
 
 # import nifti2traintest
 # import matplotlib.pyplot as plt

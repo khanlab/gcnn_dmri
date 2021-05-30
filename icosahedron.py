@@ -18,6 +18,7 @@ class icomesh:
         self.vertices=[] #this is the full icosahedron
         self.grid=[]
         self.m=m  #parameter for geodesic mesh
+        self.H = self.m + 1
         self.n=0  #parameter for geodesic mesh
         self.repeats=1 #parameter for
         self.freq=self.repeats * (self.m * self.m + self.m * self.n + self.n * self.n)
@@ -31,6 +32,11 @@ class icomesh:
         self.X_in_grid=[]
         self.Y_in_grid=[]
         self.Z_in_grid=[]
+
+        #run here usually used commands on initializtion, can be removed if needed
+        self.get_icomesh()
+        self.vertices_to_matrix()
+        self.grid2xyz()
 
     def get_icomesh(self):
         self.vertices.extend([Vec(0.894427,0.000000,0.447214),

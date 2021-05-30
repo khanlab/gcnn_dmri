@@ -47,7 +47,11 @@ class diffVolume():
     """
     Class for diffusion volume data
     """
-    def __init__(self):
+    def __init__(self,folder):
+        """
+        init for diffVolume
+        :param folder: folder for diffusion data
+        """
         self.vol = []
         self.bvals = []
         self.bvecs = []
@@ -60,6 +64,11 @@ class diffVolume():
         self.bvec_meshes=[]
         self.ico_mesh=[]
         self.interpolation_matrices=[]
+
+        #just run the usual things here anyway
+        self.getVolume(folder)
+        self.shells()
+        self.makeBvecMeshes()
 
 
     def getVolume(self, folder=None):
@@ -74,6 +83,7 @@ class diffVolume():
         self.bvals, self.bvecs = read_bvals_bvecs(folder+"/bvals",folder+"/bvecs")
         self.gtab =gradient_table(self.bvals,self.bvecs)
         self.mask = load(folder+"/nodif_brain_mask.nii.gz")
+
 
 
     def shells(self):
@@ -174,63 +184,76 @@ class diffVolume():
     def makeFlat(self,p_list,ico_mesh,interp='inverse_distance'):
         """
         This function returns the diffusion signal at voxels in p_list as a flat array to be passed to the network
-        :param p_list: List of voxels
+        :param p_list: List of voxels shape (N,3)
         :param ico_mesh: Initiated (mesh made, etc.) instance of icomesh class
         :param interp: Type of interpolation used ('nearest','linear','cubic','inverse_distance')
-        :return: Flat array
+        :return: list of icosahedron realized signal, S0 as first item in list
         """
 
         n_shells = len(self.inds) #this includes the S_0 "shell"
         ico_signal=[]
         flat=[]
         S0=[]
-        for pid,p in enumerate(p_list): #have to cycle through all points in p_list
-            #print(pid)
-            ico_signal_per_shell=[]
-            flat_per_shell=[]
-            S0_per_point=[]
-            for sid in range(0,n_shells): #go through each shell also
-                location=[]
-                location.extend(p)
-                location.append(self.inds[sid])
-                location=tuple(location)
-                S=self.vol.get_fdata()[location]
-                if sid==0:
-                    S0_per_point.append(S)
-                    continue
-                Stwice=S#np.concatenate([S,S],0) #insteal of symmterizing the signal lets symmterize by average on
-                # the icosahedron
-                #Stwice=self.bvec_meshes[sid-1].smoothing(S,np.ones_like(S),1e-4,0.1,0.01)[0]
-                ico_lons=ico_mesh.interpolation_mesh.lons
-                ico_lats = ico_mesh.interpolation_mesh.lats
-                #temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
-                #stripy interp
-                #print(S0)
-                #print(np.mean(S0))
-                if interp =='nearest': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,
-                                                                                     zdata=Stwice)#/np.mean(
-                # S0_per_point))
-                if interp =='linear': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,
-                                                                                    zdata=Stwice)#/np.mean(
-                # S0_per_point))
-                if interp =='cubic': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=3,
-                                                                                   zdata=Stwice)#/np.mean(S0_per_point))
-                if interp =='inverse_distance': temp=np.matmul(self.interpolation_matrices[sid-1],Stwice)#/np.mean(S0_per_point)) #inverse distance
-                
-                new_temp=np.zeros(len(ico_lats))
-                for t in range(0,len(ico_lats)):
-                    S1=temp[t]
-                    S2=temp[int(ico_mesh.antipodals[t])]
-                    new_temp[t]=(0.5*(S1+S2))
-                ico_signal_per_shell.append(new_temp)
-                #flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[sid],ico_mesh))
-                flat_per_shell.append(self.sphere_to_flat(new_temp, ico_mesh))
-            #if ico_signal_per_shell is not None:
-            ico_signal.append(ico_signal_per_shell)
-            flat.append(flat_per_shell)
-            S0.append(S0_per_point)
 
-        return S0, flat, ico_signal
+        #this needs to revised. Lets just stick with inverse_distance for now
+        data=self.vol.get_fdata()[p_list[:,0],p_list[:,1],p_list[:,2]]
+        out_each_shell=[]
+        for sid in range(0,n_shells):
+            if sid==0:
+                out_each_shell.append(data[:,self.inds[sid]])
+                continue
+            out_each_shell.append(np.matmul(self.interpolation_matrices[sid-1],data[:,self.inds[sid]].T).T)
+
+        return out_each_shell
+
+
+        # for pid,p in enumerate(p_list): #have to cycle through all points in p_list
+        #     #print(pid)
+        #     ico_signal_per_shell=[]
+        #     flat_per_shell=[]
+        #     S0_per_point=[]
+        #     for sid in range(0,n_shells): #go through each shell also
+        #         location=[]
+        #         location.extend(p)
+        #         location.append(self.inds[sid])
+        #         location=tuple(location)
+        #         S=self.vol.get_fdata()[location]
+        #         if sid==0:
+        #             S0_per_point.append(S)
+        #             continue
+        #         Stwice=S#np.concatenate([S,S],0) #insteal of symmterizing the signal lets symmterize by average on
+        #         # the icosahedron
+        #         #Stwice=self.bvec_meshes[sid-1].smoothing(S,np.ones_like(S),1e-4,0.1,0.01)[0]
+        #         ico_lons=ico_mesh.interpolation_mesh.lons
+        #         ico_lats = ico_mesh.interpolation_mesh.lats
+        #         #temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,zdata=Stwice/np.mean(S0_per_point))
+        #         #stripy interp
+        #         #print(S0)
+        #         #print(np.mean(S0))
+        #         if interp =='nearest': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=0,
+        #                                                                              zdata=Stwice)#/np.mean(
+        #         # S0_per_point))
+        #         if interp =='linear': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=1,
+        #                                                                             zdata=Stwice)#/np.mean(
+        #         # S0_per_point))
+        #         if interp =='cubic': temp, err=self.bvec_meshes[sid-1].interpolate(ico_lons,ico_lats,order=3,
+        #                                                                            zdata=Stwice)#/np.mean(S0_per_point))
+        #         if interp =='inverse_distance': temp=np.matmul(self.interpolation_matrices[sid-1],Stwice)#/np.mean(S0_per_point)) #inverse distance
+        #
+        #         new_temp=np.zeros(len(ico_lats))
+        #         for t in range(0,len(ico_lats)):
+        #             S1=temp[t]
+        #             S2=temp[int(ico_mesh.antipodals[t])]
+        #             new_temp[t]=(0.5*(S1+S2))
+        #         ico_signal_per_shell.append(new_temp)
+        #         #flat_per_shell.append(self.sphere_to_flat(ico_signal_per_shell[sid],ico_mesh))
+        #         flat_per_shell.append(self.sphere_to_flat(new_temp, ico_mesh))
+        #     #if ico_signal_per_shell is not None:
+        #     ico_signal.append(ico_signal_per_shell)
+        #     flat.append(flat_per_shell)
+        #     S0.append(S0_per_point)
+        #
+        # return S0, flat, ico_signal
 
     def sphere_to_flat(self,ico_signal,ico_mesh):
         H=ico_mesh.m+1
