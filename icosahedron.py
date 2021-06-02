@@ -7,7 +7,8 @@ from stripy.spherical import xyz2lonlat
 import matplotlib.cm as cm
 import matplotlib as mpl
 from dipy.core.sphere import (sphere2cart, cart2sphere)
-
+from dihedral12 import xy2ind
+from dihedral12 import padding_basis
 
 class icomesh:
     """
@@ -207,6 +208,36 @@ class icomesh:
                 self.Z_in_grid[i,j]=z  #fill out northpole
                 #print(self.X_in_grid[:,c*h:(c+1)*h])
 
+        strip_xy = np.arange(0, H - 1)
+
+        for c in range(0, 5):  # for padding
+            # col=(c+1)%5*h+1
+            # flat[0,c*h+strip]=flat[strip-1,col]
+            self.X_in_grid[0, c * h + 1] = 0  # northpole
+            self.Y_in_grid[0, c * h + 1] = 0  # northpole
+            self.Z_in_grid[0, c * h + 1] = 1  # northpole
+
+            c_left = c
+            x_left = -1
+            y_left = strip_xy
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+            # print(i_left,j_left)
+
+            c_right = (c - 1) % 5
+            x_right = H - 2 - strip_xy
+            y_right = H - 2
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+
+            self.X_in_grid[i_left, j_left] = self.X_in_grid[i_right, j_right]
+            self.Y_in_grid[i_left, j_left] = self.Y_in_grid[i_right, j_right]
+            self.Z_in_grid[i_left, j_left] = self.Z_in_grid[i_right, j_right]
+
+        I, J, T = padding_basis(H=H)
+
+
+        self.X_in_grid = self.X_in_grid[I[0, :, :], J[0, :, :]]
+        self.Y_in_grid = self.Y_in_grid[I[0, :, :], J[0, :, :]]
+        self.Z_in_grid = self.Z_in_grid[I[0, :, :], J[0, :, :]]
 
     # def plot_icosohedron(self,maxface=22):
     #     """

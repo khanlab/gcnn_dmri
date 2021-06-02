@@ -15,7 +15,7 @@ class dti():
     """
     Class for dti results
     """
-    def __init__(self):
+    def __init__(self,pathprefix,maskpath):
         self.FA=[]
         self.L1=[]
         self.L2=[]
@@ -26,7 +26,9 @@ class dti():
         self.MD = []
         self.MO = []
         self.S0 = []
-        self.mask= []
+        self.mask= load(maskpath)
+
+        self.load(pathprefix)
 
     def load(self,pathprefix):
         if pathprefix is None:
@@ -40,8 +42,56 @@ class dti():
         self.V3 = load(pathprefix + "_V3.nii.gz")
 
 
+    def icoSignalFromDti(self,ico,bval=1000):
+        """
+        Generate signal on the icosahedron from the DTI metrics
+        :param dti: dti class
+        :param ico: icomesh
+        :return: nifti for signal
+        """
+
+        #construct the bvector matrix
+        ico.grid2xyz()
+        X = ico.X_in_grid.reshape(-1)
+        Y = ico.Y_in_grid.reshape(-1)
+        Z = ico.Z_in_grid.reshape(-1)
+
+        h = ico.H + 1
+        w = 5*h
+
+        XYZ = np.asarray([X,Y,Z])
+
+        i,j,k = np.where(self.mask.get_fdata()>0)
+        V1 = self.V1.get_fdata()[i,j,k,:]
+        V2 = self.V2.get_fdata()[i,j,k,:]
+        V3 = self.V3.get_fdata()[i,j,k,:]
+        L1 = self.L1.get_fdata()[i,j,k]
+        L2 = self.L2.get_fdata()[i,j,k]
+        L3 = self.L3.get_fdata()[i,j,k]
+
+        S = np.zeros([i.shape[0],XYZ.shape[-1]])
 
 
+        #construct the diffusion tensor
+        for p in range(0,V1.shape[0]):
+            P = np.asarray([V1[p],V2[p],V3[p]])
+            Pinv = np.linalg.inv(P)
+            Diag = np.diag([L1[p],L2[p],L3[p]])
+            D = np.matmul(Diag,Pinv)
+            D = np.matmul(P,D)
+
+            e = np.matmul(D,XYZ)
+            e = (e*XYZ).sum(0)
+
+            S[p] = np.exp(-bval*e)
+            S[p,S[p]==1]=0
+
+        #return the output in numpy format
+        out = np.zeros(self.L1.shape + (h*w,))
+        out[i,j,k] = S
+        out = out.reshape(self.L1.shape + (h,w))
+
+        return out
 
 class diffVolume():
     """
@@ -416,8 +466,6 @@ class diffVolume():
                 fbvec.write(str(self.bvecs_sorted[0][i, 2]) + " ")
             write_bvec_comp(fbvec, 2, diffout.shape[-1]-bval_inds[c])
             fbvec.close()
-
-
 
 
 

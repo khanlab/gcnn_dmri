@@ -26,8 +26,17 @@ import diffusion
 import icosahedron
 import dihedral12 as d12
 
-X_nii=nib.load('./data/6/data_cut_flat.nii.gz')
-Y_nii=nib.load('./data/90/data_cut_flat.nii.gz')
+
+#for debugging isoSignalFromDti
+diff=diffusion.diffVolume('./data/90')
+dti=diffusion.dti('./data/90/dti','./data/90/nodif_brain_mask.nii.gz')
+H=9
+ico = icosahedron.icomesh(m=H - 1)
+Y=dti.icoSignalFromDti(ico)
+
+
+X_nii=nib.load('./data/6/data.nii.gz')
+#Y_nii=nib.load('./data/90/data_cut_flat.nii.gz')
 
 #get patches from matrices of coordintes
 x = np.arange(0,X_nii.shape[0])
@@ -38,14 +47,14 @@ x=torch.from_numpy(x)
 y=torch.from_numpy(y)
 z=torch.from_numpy(z)
 
-Nc=16 #patch size
+Nc=29 #patch size
 #unfold the coordinates
 x=x.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
 y=y.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
 z=z.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
 
 #do same for mask
-mask = nib.load('./data/6/mask_cut.nii.gz')
+mask = nib.load('./data/6/nodif_brain_mask.nii.gz')
 mask= mask.get_fdata()
 mask = torch.from_numpy(mask)
 mask = mask.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
@@ -61,12 +70,31 @@ z = z.reshape(((-1,) + tuple(z.shape[-3:])))
 mask = mask.reshape(mask.shape[0],-1)
 mask = mask.mean(dim=-1)
 occupation_theshold=0.8
-occ_inds= np.where(mask>0.5)[0]
+occ_inds= np.where(mask>0.99)[0]
 
-N=25
-x=x[occ_inds[0:0+N]]
-y=y[occ_inds[0:0+N]]
-z=z[occ_inds[0:0+N]]
+#maybe get occupancy from FA
+FA = nib.load('./data/90/dti_FA.nii.gz')
+FA = FA.get_fdata()
+FA = torch.from_numpy(FA)
+FA = FA.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+
+#flatten the corse direction
+coarse_sz=FA.shape[0:3]
+FA = FA.reshape(((-1,) + tuple(FA.shape[-3:])))
+
+
+#get occupancy from mask
+FA = FA.reshape(FA.shape[0],-1)
+FA = FA.mean(dim=-1)
+occupation_theshold=0.8
+occ_inds= np.where(FA>0.2)[0]
+
+
+N=5
+oi=np.random.randint(0,len(occ_inds),N)
+x=x[occ_inds[oi]]
+y=y[occ_inds[oi]]
+z=z[occ_inds[oi]]
 
 #extract actual data now
 #X=X_nii.get_fdata()[x,y,z] this runs out of memory
@@ -77,7 +105,7 @@ H=9
 h=H+1
 w=5*h
 diff6 = diffusion.diffVolume('./data/6')
-diff90 = diffusion.diffVolume('./data/90')
+#diff90 = diffusion.diffVolume('./data/90')
 ico = icosahedron.icomesh(m=H - 1)
 I, J, T = d12.padding_basis(H=H)
 
@@ -89,17 +117,24 @@ voxels=np.asarray([xp,yp,zp]).T
 diff6.makeInverseDistInterpMatrix(ico.interpolation_mesh)
 S0X, X = diff6.makeFlat(voxels,ico)
 X = X[:,:,I[0,:,:],J[0,:,:]]
-#X = X.reshape([-1,h*w])/S0X
+X = X.reshape([-1,h*w])/S0X
 shp=tuple(x.shape) + (h,w)
 X = X.reshape(shp)
 
-diff90.makeInverseDistInterpMatrix(ico.interpolation_mesh)
-S0Y, Y = diff90.makeFlat(voxels,ico)
-S0Y = S0Y.mean(-1)
-S0Y = S0Y.reshape([len(S0Y),1])
-Y = Y[:,:,I[0,:,:],J[0,:,:]]
-#Y = Y.reshape([-1,h*w])/S0Y
+# diff90.makeInverseDistInterpMatrix(ico.interpolation_mesh)
+# S0Y, Y = diff90.makeFlat(voxels,ico)
+# S0Y = S0Y.mean(-1)
+# S0Y = S0Y.reshape([len(S0Y),1])
+# Y = Y[:,:,I[0,:,:],J[0,:,:]]
+# #Y = Y.reshape([-1,h*w])/S0Y
+# Y=Y.reshape(shp)
+
+Y = Y[xp,yp,zp]
 Y=Y.reshape(shp)
+
+#make training data from dti
+#dti = diffusion.dti('./data/90/dti')
+
 
 X[np.isnan(X)]=0
 X[np.isinf(X)]=0
@@ -202,8 +237,8 @@ class Net(Module):
         self.w = 5*(H+1)
         #self.Nc = shp[1]
         #self.Nc3 = shp[1]*shp[1]*shp[1]
-        self.gConvs= gnet3d(H,[1,4,4,4,4,1],shells,[F.relu,F.relu,F.relu,F.relu,None])
-        self.conv3ds=conv3dList([1*self.h*self.w,4,4,1*self.h*self.w],[F.relu,F.relu,None])
+        self.gConvs= gnet3d(H,[1,4,4,4],shells,[F.relu,F.relu,F.relu])
+        self.conv3ds=conv3dList([4*self.h*self.w,4,4,1*self.h*self.w],[F.relu,F.relu,None])
 
     def forward(self,x):
         x=self.gConvs(x)
@@ -217,7 +252,7 @@ net = Net(H).cuda()
 H=9
 net = Net(H).float().cuda()
 
-#net.load_state_dict(torch.load('./net'))
+net.load_state_dict(torch.load('./net'))
 
 criterion = nn.MSELoss()
 #criterion=nn.SmoothL1Loss()
@@ -232,9 +267,9 @@ scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, ve
 running_loss = 0
 
 train = torch.utils.data.TensorDataset(X, Y-X)
-trainloader = DataLoader(train, batch_size=3)
+trainloader = DataLoader(train, batch_size=1)
 #
-for epoch in range(0, 10):
+for epoch in range(0, 6):
     print(epoch)
     for n, (inputs, target) in enumerate(trainloader, 0):
         # print(n)
@@ -260,7 +295,7 @@ for epoch in range(0, 10):
     scheduler.step(running_loss)
     running_loss = 0.0
 
-torch.save(net.state_dict(),'./net')
+#torch.save(net.state_dict(),'./net')
 
 ##predict
 #how do we do this quickly
@@ -397,6 +432,9 @@ for p in range(0,len(i)):
     # print(diff_out.shape)
     # print(signal.shape)
     diff_out[i[p],j[p],k[p],1:] = signal[inds[1:]]
+
+# for i in range(1,diff_out.shape[-1]):
+#     diff_out[:,:,:,i] = diff_out[:,:,:,i]*diff_out[:,:,:,0]
 
 diff_out=nib.Nifti1Image(diff_out,diff6.vol.affine)
 nib.save(diff_out,'./data_network.nii.gz')
