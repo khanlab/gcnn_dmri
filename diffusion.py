@@ -123,6 +123,13 @@ class diffVolume():
         for bvecs in self.bvecs_sorted:
             self.bvecs_kd.append(KDTree(bvecs,10))
 
+    def cut_ijk(self):
+        diff_reduce=self.vol.get_fdata()[1:,7:-7,1:]
+        mask_reduce=self.mask.get_fdata()[1:,7:-7,1:]
+
+        self.vol=nib.Nifti1Image(diff_reduce,self.vol.affine)
+        self.mask=nib.Nifti1Image(mask_reduce,self.vol.affine)
+
     def makeBvecMeshes(self):
         """
         Makes bvec meshes for each shell > 0. Note that each shell will have double the amount of bvec directions
@@ -147,7 +154,7 @@ class diffVolume():
         for bvec_mesh in self.bvec_meshes:
             N_bvec=len(bvec_mesh.lons)
             interp_matrix = np.zeros([N_ico, N_bvec])
-            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=2)
+            dist,idx=bvec_mesh.nearest_vertices(ico_mesh.lons,ico_mesh.lats,k=3)
             weights=1/dist
             for row in range(0,N_ico):
                 norm=sum(weights[row])
@@ -171,15 +178,15 @@ class diffVolume():
         #         interp_matrix[row,idx[row]]=weights[row]/norm
         #     self.interpolation_matrices.append(interp_matrix)
 
-    def inverseDistanceInterp(self,r,kd,signal):
-        dist, inds = kd.query(r, 10)
-        print("r",r)
-        print("dist", dist)
-        print("inds", inds)
-        sigs = signal[inds]
-        dist = 1 / dist
-        norm = sum(dist)
-        return sum(dist * sigs) / norm
+    # def inverseDistanceInterp(self,r,kd,signal):
+    #     dist, inds = kd.query(r, 10)
+    #     print("r",r)
+    #     print("dist", dist)
+    #     print("inds", inds)
+    #     sigs = signal[inds]
+    #     dist = 1 / dist
+    #     norm = sum(dist)
+    #     return sum(dist * sigs) / norm
 
     def makeFlat(self,p_list,ico_mesh,interp='inverse_distance'):
         """
@@ -200,11 +207,28 @@ class diffVolume():
         out_each_shell=[]
         for sid in range(0,n_shells):
             if sid==0:
-                out_each_shell.append(data[:,self.inds[sid]])
+                S0=data[:,self.inds[sid]]
                 continue
             out_each_shell.append(np.matmul(self.interpolation_matrices[sid-1],data[:,self.inds[sid]].T).T)
 
-        return out_each_shell
+        #do the antipodal averaging
+        for sid in range(0,n_shells-1):
+            out_each_shell[sid]= 0.5*(out_each_shell[sid] + out_each_shell[sid][:,ico_mesh.antipodals])
+
+        basis = self.sphere_to_flat_basis(ico_mesh)
+        h=basis.shape[-2]
+        w=basis.shape[-1]
+        N=out_each_shell[0].shape[0]
+        out=np.zeros([N,n_shells-1,h,w])
+
+        i_nan,j_nan=np.where(np.isnan(basis))
+        basis[i_nan,j_nan]=0
+        basis=basis.astype(int)
+        for sid in range(0,n_shells-1):
+            out[:,sid,:,:]=out_each_shell[sid][:,basis]
+            out[:,sid,i_nan,j_nan]=0
+
+        return S0, out
 
 
         # for pid,p in enumerate(p_list): #have to cycle through all points in p_list
@@ -254,6 +278,44 @@ class diffVolume():
         #     S0.append(S0_per_point)
         #
         # return S0, flat, ico_signal
+    def sphere_to_flat_basis(self,ico_mesh):
+        H = ico_mesh.m + 1
+        w = 5 * (H + 1)
+        h = H + 1
+        basis = np.empty([h, w])
+        basis[:]=np.nan
+        top_faces = [[1, 2], [5, 6], [9, 10], [13, 14], [17, 18]]
+        for c in range(0, 5):
+            face = top_faces[c]
+            for top_bottom in face:
+                #signal_inds are the inds that are needed from vector to matrix
+                signal_inds = np.asarray( ico_mesh.interpolation_inds[top_bottom]).astype(int)
+                #signal = ico_signal[signal_inds]
+                i = ico_mesh.i_list[top_bottom]
+                j = ico_mesh.j_list[top_bottom]
+                i = np.asarray(i).astype(int)
+                j = np.asarray(c * h + j + 1).astype(int)
+                basis[i, j] = signal_inds
+
+        #for padding
+        strip_xy = np.arange(0, H - 1)
+        for c in range(0, 5):  # for padding
+            basis[0, c * h + 1] = 0  # northpole
+
+            c_left = c
+            x_left = -1
+            y_left = strip_xy
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+
+            c_right = (c - 1) % 5
+            x_right = H - 2 - strip_xy
+            y_right = H - 2
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+
+            basis[i_left, j_left] = basis[i_right, j_right]
+
+
+        return basis
 
     def sphere_to_flat(self,ico_signal,ico_mesh):
         H=ico_mesh.m+1

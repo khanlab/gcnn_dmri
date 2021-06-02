@@ -172,7 +172,7 @@ class icomesh:
             lon,lat=xyz2lonlat(-x,-y,-z)
             dist, id= self.interpolation_mesh.nearest_vertices(lon,lat,1)
             antipodals[i]=int(id[0][0])
-        self.antipodals=antipodals
+        self.antipodals=antipodals.astype(int)
 
 
     def grid2xyz(self):

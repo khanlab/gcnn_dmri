@@ -266,7 +266,7 @@ class opool(Module):
 
 class gConv_gNorm(Module):
     """
-    This class combines the gConv and gNorm layers with reLU activaition
+    This class combines the gConv and gNorm layers with a provided activaition
     """
     def __init__(self,Cin,Cout,H,shells=None,activation=None):
         super(gConv_gNorm, self).__init__()
