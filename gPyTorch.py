@@ -296,7 +296,7 @@ class gNetFromList(Module):
             if i ==0:
                 self.gConvs = [gConv_gNorm(filterlist[i], filterlist[i+1], H, shells=shells,activation=activationlist[i])]  # this is the initilization
             else:
-                self.gConvs.append(gConv_gNorm(filterlist[i],filterlist[i+1],H,shells=shells,activation=activationlist[i]))
+                self.gConvs.append(gConv_gNorm(filterlist[i],filterlist[i+1],H,shells=0,activation=activationlist[i]))
         self.gConvs=ModuleList(self.gConvs)
 
     def forward(self,x):

@@ -40,6 +40,7 @@ class dti():
         self.V1 = load(pathprefix + "_V1.nii.gz")
         self.V2 = load(pathprefix + "_V2.nii.gz")
         self.V3 = load(pathprefix + "_V3.nii.gz")
+        self.S0 = load(pathprefix + "_S0.nii.gz")
 
 
     def icoSignalFromDti(self,ico,bval=1000):
@@ -68,6 +69,7 @@ class dti():
         L1 = self.L1.get_fdata()[i,j,k]
         L2 = self.L2.get_fdata()[i,j,k]
         L3 = self.L3.get_fdata()[i,j,k]
+        S0 = self.S0.get_fdata()[i,j,k]
 
         S = np.zeros([i.shape[0],XYZ.shape[-1]])
 
@@ -77,13 +79,19 @@ class dti():
             P = np.asarray([V1[p],V2[p],V3[p]])
             Pinv = np.linalg.inv(P)
             Diag = np.diag([L1[p],L2[p],L3[p]])
-            D = np.matmul(Diag,Pinv)
-            D = np.matmul(P,D)
+            D = np.matmul(Diag,P)
+            D = np.matmul(Pinv,D)
 
             e = np.matmul(D,XYZ)
             e = (e*XYZ).sum(0)
 
-            S[p] = np.exp(-bval*e)
+            # e = np.zeros(XYZ.shape[1])
+            # for v,xyz in enumerate(XYZ.T):
+            #     this_e = np.matmul(D,xyz)
+            #     this_e = np.matmul(xyz,this_e)
+            #     e[v] = this_e
+
+            S[p] = S0[p]*np.exp(-bval*e)
             S[p,S[p]==1]=0
 
         #return the output in numpy format
