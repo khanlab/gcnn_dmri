@@ -7,6 +7,7 @@ import pickle
 import training
 import torch
 import nibabel as nib
+import preprocessing
 
 
 """
@@ -33,7 +34,189 @@ def normalize(Ypredict):
     out=Ypredict
     norm=np.sqrt(np.sum(out*out,-1))
     return out/norm[:,None]
+
+
+class predicting_data:
+    def __init__(self, inputpath, H):
         
+        self.inputpath = inputpath
+        self.diff_input = diffusion.diffVolume(inputpath)
+        self.in_shp = self.diff_input.vol.shape
+
+
+        self.N_patch= 16 #this is multiple of 144 and 176 (so have to pad HCP diffusion)
+        self.H = H
+
+        self.make_coords()
+        self.generate_predicting_data()
+
+    def make_coords(self):
+        #we make patches with meshgrids of coords and then extraxt data using those coords
+        #we also make mask list here
+        print("Making coords for patch extraction")
+        
+        self.x = np.arange(0,self.in_shp[0])
+        self.y = np.arange(0,self.in_shp[1])
+        self.z = np.arange(0,self.in_shp[2])
+        
+        self.x,self.y,self.z = np.meshgrid(self.x,self.y,self.z,indexing='ij')
+
+        self.x=torch.from_numpy(self.x)
+        self.y=torch.from_numpy(self.y)
+        self.z=torch.from_numpy(self.z)
+
+        Nc=self.N_patch
+
+        self.x=self.x.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        self.y=self.y.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        self.z=self.z.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+
+        self.x = self.x.reshape((-1,)+tuple(self.x.shape[-3:]))
+        self.y = self.y.reshape((-1,)+tuple(self.y.shape[-3:]))
+        self.z = self.z.reshape((-1,)+tuple(self.z.shape[-3:]))
+
+        mask = torch.from_numpy(self.diff_input.mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        #flatten patch labels (indices for each patch) and patch indices (indices for voxels in patch)
+        mask = mask.reshape((-1,)+ tuple(mask.shape[-3:])) #flatten patch labels
+        mask = mask.reshape(mask.shape[0],-1) #flatten patch voxels
+        #take mean for each patch
+        self.mask = mask.mean(dim=-1)
+
+    def generate_predicting_data(self):
+            #this will generate the inputs and outputs
+            
+            ##get coordinates for data extraction
+            occ_inds = np.where(self.mask>0)[0] #extract patches based on mean FA
+            #occ_inds = np.where(self.mask>0.5)[0]
+            xpp=self.x[occ_inds] #extract coordinates
+            ypp=self.y[occ_inds]
+            zpp=self.z[occ_inds]
+
+            ## generate training data
+            H = self.H #----------------dimensions of icosahedron internal space-------------------#
+            h = H+1
+            w = 5*h
+            self.ico = icosahedron.icomesh(m=H-1) 
+            I, J, T = d12.padding_basis(H=H) #for padding
+            xp= xpp.reshape(-1).numpy() #fully flattened coordinates
+            yp= ypp.reshape(-1).numpy()
+            zp= zpp.reshape(-1).numpy()
+            voxels=np.asarray([xp,yp,zp]).T #putting them in one array
+            #inputs
+            self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
+            S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
+            X = X[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+            shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
+            X = X.reshape(shp)
+            #standardize inputs
+            self.Xmean = X.mean()
+            self.Xstd = X.std()
+            X = (X - self.Xmean)/self.Xstd
+            X = torch.from_numpy(X).contiguous().float()
+            
+            self.X = X
+            self.xp = xp
+            self.yp = yp
+            self.zp = zp 
+        
+class residual5dPredictor:
+    def __init__(self,datapath,netpath):
+        self.datapath = datapath
+        self.netpath = netpath
+        self.modelParams = []
+        self.pred_data = []
+
+        self.loadNetwork()
+        self.generate_predicting_data()
+
+    def loadNetwork(self):
+        #load pkl file for model params and initiate network
+        path=self.netpath
+        self.modelParams=load_obj(path)
+        trnr=training.trainer(self.modelParams,0,0)
+        trnr.makeNetwork()
+        self.net=trnr.net
+        self.net.load_state_dict(torch.load(path+ 'net'))
+
+    def generate_predicting_data(self):
+        self.H = self.modelParams['H']
+        self.pred_data=predicting_data(self.datapath,self.H)
+
+    def predict(self, outpath,batch_size=1):
+        H = self.H
+        h = self.H +1
+        w = 5*h
+        pred = torch.zeros_like(self.pred_data.X)
+        batch_size=1
+        for i in range(0,self.pred_data.X.shape[0],batch_size):
+            print(i)
+            pred[i:i+batch_size]=(self.net(self.pred_data.X[i:i+batch_size].cuda()).cpu() + self.pred_data.X[i:i+batch_size]).detach()
+
+        out = np.zeros((self.pred_data.diff_input.vol.shape[0:3] + (h,w)))
+        oldshp = pred.shape
+        pred = pred.view(-1,h,w)
+        pred = pred*self.pred_data.Xstd + self.pred_data.Xmean
+
+        out[self.pred_data.xp,self.pred_data.yp,self.pred_data.zp] = pred
+
+        #make nifti
+        basis=np.zeros([h,w])
+        for c in range(0,5):
+            basis[1:H,c*h+1:(c+1)*h-1]=1
+        N=len(basis[basis==1])+1
+
+        print('Number of bdirs is: ', N)
+
+        N_random=2*w
+        rng=np.random.default_rng()
+        inds=rng.choice(N-2,size=N_random,replace=False)+1
+        inds[0]=0
+
+        bvals=np.zeros(N_random)
+        x_bvecs=np.zeros(N_random)
+        y_bvecs=np.zeros(N_random)
+        z_bvecs=np.zeros(N_random)
+
+        x_bvecs[1:]=self.pred_data.ico.X_in_grid[basis==1].flatten()[inds[1:]]
+        y_bvecs[1:]=self.pred_data.ico.Y_in_grid[basis==1].flatten()[inds[1:]]
+        z_bvecs[1:]=self.pred_data.ico.Z_in_grid[basis==1].flatten()[inds[1:]]
+
+        bvals[1:]=1000
+
+        sz=out.shape
+        diff_out=np.zeros([sz[0],sz[1],sz[2],N_random])
+        diff_out[:,:,:,0]=self.pred_data.diff_input.vol.get_fdata()[:,:,:,self.pred_data.diff_input.inds[0]].mean(-1)
+        i, j, k = np.where(self.pred_data.diff_input.mask.get_fdata() == 1)
+
+        for p in range(0,len(i)):
+            signal =out[i[p],j[p],k[p]]
+            signal = signal[basis==1].flatten()
+            diff_out[i[p],j[p],k[p],1:] = signal[inds[1:]]
+
+        diff_out=nib.Nifti1Image(diff_out,self.pred_data.diff_input.vol.affine)
+        nib.save(diff_out,outpath+'./data_network.nii.gz')
+
+        #write the bvecs and bvals
+        fbval = open(outpath+'./bvals_network', "w")
+        for bval in bvals:
+            fbval.write(str(bval)+" ")
+        fbval.close()
+
+        fbvecs = open(outpath+'./bvecs_network',"w")
+        for x in x_bvecs:
+            fbvecs.write(str(x)+ ' ')
+        fbvecs.write('\n')
+        for y in y_bvecs:
+            fbvecs.write(str(y)+ ' ')
+        fbvecs.write('\n')
+        for z in z_bvecs:
+            fbvecs.write(str(z)+ ' ')
+        fbvecs.write('\n')
+        fbvecs.close()
+
+
+       
+
 
 class predictor:
     def __init__(self, datapath, dtipath, netpath):

@@ -12,6 +12,10 @@ from torch.utils.data import DataLoader
 from torch.nn import MaxPool2d
 from gPyTorch import gNetFromList
 import pickle
+from torch.nn import InstanceNorm3d
+from torch.nn import Conv3d
+from torch.nn import ModuleList
+
 
 def path_from_modelParams(modelParams):
     def array2str(A):
@@ -110,6 +114,106 @@ class gnet(Module):
 
         return x
 
+class gnet3d(Module): #this module (layer) takes in a 3d patch but only convolves in internal space
+    def __init__(self,H,filterlist,shells=None,activationlist=None): #shells should be same as filterlist[0]
+        super(gnet3d,self).__init__()
+        self.filterlist = filterlist
+        self.gconvs=gNetFromList(H,filterlist,shells,activationlist= activationlist)
+        self.pool = opool(filterlist[-1])
+
+    def forward(self,x):
+        #x will have shape [batch,Nc,Nc,Nc,C,h,w]
+        B=x.shape[0]
+        Nc = x.shape[1]
+        C = x.shape[-3]
+        h = x.shape[-2]
+        w = x.shape[-1]
+        # print('we are in gnet3d')
+        # print(x.shape)
+        x = x.view((B*Nc*Nc*Nc,C,h,w)) #patch voxels go in as a batch
+        # print(x.shape)
+        x = self.gconvs(x) #usual g conv
+        x = self.pool(x) # shape [batch,Nc^3,filterlist[-1],h,w
+        #x = x.view([B,Nc,Nc,Nc,self.filterlist[-1],h,w])
+        x = x.view([B,Nc,Nc,Nc,h,w]) #this is under the assumption that last filter is 1 with None activation
+        # print(x.shape)
+        return x
+
+#this is a class to make lists out of
+class conv3d(Module):
+    """
+    This class combines conv3d and batch norm layers and applies a provided activation
+    """
+    def __init__(self,Cin,Cout,activation=None):
+        super(conv3d,self).__init__()
+        self.activation= activation
+        self.conv = Conv3d(Cin,Cout,3,padding=1)
+        self.norm = InstanceNorm3d(Cout)
+
+
+    def forward(self,x):
+        if self.activation!=None:
+            x=self.activation(self.conv(x))
+            x=self.norm(x)
+
+        else:
+            x=self.conv(x)
+            x=self.norm(x)
+        return x
+
+#this makes the list for 3d convs
+class conv3dList(Module):
+    def __init__(self,filterlist,activationlist=None):
+        super(conv3dList,self).__init__()
+        self.conv3ds=[]
+        self.filterlist = filterlist
+        if activationlist is None:
+            self.activationlist = [None for i in range(0,len(filterlist)-1)]
+        for i in range(0,len(filterlist)-1):
+            if i==0:
+                self.conv3ds=[conv3d(filterlist[i],filterlist[i+1],activationlist[i])]
+            else:
+                self.conv3ds.append(conv3d(filterlist[i],filterlist[i+1],activationlist[i]))
+        self.conv3ds = ModuleList(self.conv3ds)
+
+    def forward(self,x):
+        H=x.shape[-2]-1
+        h = H + 1
+        w = 5 * (H + 1)
+        Nc = x.shape[1]
+        B = x.shape[0]
+        C=1#x.shape[-3]
+        for i,conv in enumerate(self.conv3ds):
+            if i==0:
+                #input size is [B,Nc,Nc,Nc,h,w]
+                
+                ##-----directions as channels
+                #x = x.view([B,Nc,Nc,Nc,C*h*w]).moveaxis(-1,1) # Instead of this, maybe a simpler approach is to put h*w in batch dimension
+                
+                ## -----directions as batch
+                x = x.moveaxis((-2,-1),(1,2)).view([B*h*w,C,Nc,Nc,Nc])
+                
+                x = conv(x)
+
+            elif i==len(self.conv3ds)-1:
+                x=conv(x)
+                
+                ## -------directions as channels
+                #x = x.moveaxis(1,-1)
+                #C = int(self.filterlist[-1]/(h*w)) #is this right?
+                #x = x.view([B,Nc,Nc,Nc,C,h,w]) #this will be input for internal space convolutions
+                
+                ## ------directions as batch
+                #incomping shape is [batch*h*w,C,Nc,Nc,Nc]
+                C = x.shape[1]  
+                x=x.view(B,h,w,C,Nc,Nc,Nc)
+                x = x.moveaxis((1,2,3),(-2,-1,-3))
+            else:
+                x = conv(x)
+        return x
+
+
+
 class residualnet(Module):
     def __init__(self,gfilterlist,shells,H,gactivationlist=None):
         super(residualnet,self).__init__()
@@ -125,6 +229,29 @@ class residualnet(Module):
         x=self.opool(x)
 
         return x
+
+class residualnet5d(Module):
+    def __init__(self,filterlist3d,activationlist3d,filterlist2d,activationlist2d,H,shells):
+        super(residualnet5d,self).__init__()
+        #params
+        self.flist3d = filterlist3d
+        self.alist3d = activationlist3d
+        self.flist2d = filterlist2d
+        self.alist2d = activationlist2d
+        self.H = H 
+        self.h = H+1
+        self.w = 5*(H+1)
+        self.shells =shells
+
+        #network layers 
+        self.conv3ds = conv3dList(filterlist3d,activationlist3d)
+        self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d)
+
+    def forward(self,x):
+        x=self.conv3ds(x)
+        x=self.gconvs(x)
+        return x
+
 
 class trainer:
     def __init__(self,modelParams,Xtrain=None,Ytrain=None):
@@ -143,6 +270,13 @@ class trainer:
         if self.modelParams['misc']=='residual':
             self.net = residualnet(self.modelParams['gfilterlist'],self.modelParams['shells'],self.modelParams['H'],
                                    self.modelParams['gactivationlist'])
+        if self.modelParams['misc']=='residual5d':
+            self.net = residualnet5d(self.modelParams['filterlist3d'],
+                                  self.modelParams['activationlist3d'],
+                                  self.modelParams['gfilterlist'],
+                                  self.modelParams['gactivationlist'],
+                                  self.modelParams['H'],
+                                  self.modelParams['shells'])
         else:
             self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
                             self.modelParams['shells'],self.modelParams['H'],
@@ -172,10 +306,11 @@ class trainer:
             for n, (inputs, targets) in enumerate(trainloader, 0):
                 optimizer.zero_grad()
 
-                output = self.net(inputs.cuda())
+                output = self.net(inputs.cuda()).cpu()
                 loss = criterion(output, targets)
                 loss = loss.sum()
-                loss.backward()
+                print(loss)
+                loss.cuda().backward()
                 optimizer.step()
                 running_loss += loss.item()
             else:
@@ -188,7 +323,7 @@ class trainer:
 
             scheduler.step(running_loss)
             running_loss = 0.0
-            if (epoch % 10) == 9:
+            if (epoch % 3) == 2:
                 fig_err, ax_err = plt.subplots()
                 ax_err.plot(epochs_list, np.log10(loss_list))
                 if lossname is None:

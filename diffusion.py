@@ -92,7 +92,7 @@ class dti():
             #     e[v] = this_e
 
             S[p] = S0[p]*np.exp(-bval*e)
-            S[p,S[p]==1]=0
+            S[p,S[p]==S0[p]]=0
 
         #return the output in numpy format
         out = np.zeros(self.L1.shape + (h*w,))

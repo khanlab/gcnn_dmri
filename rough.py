@@ -25,6 +25,7 @@ import numpy as np
 import diffusion
 import icosahedron
 import dihedral12 as d12
+from torch.nn import InstanceNorm3d
 
 
 ############################################## DATA ###################################################
@@ -38,14 +39,14 @@ dti=diffusion.dti('/home/u2hussai/scratch/tempdata/90/dti','/home/u2hussai/scrat
 ##use the size of input diffusion volume to get patches
 #get coordinates
 x=np.arange(0,in_shp[0])
-y=np.arange(0,in_shp[1]+1)
+y=np.arange(0,in_shp[1])
 z=np.arange(0,in_shp[2])
 x,y,z = np.meshgrid(x,y,z,indexing='ij')
 x=torch.from_numpy(x)
 y=torch.from_numpy(y)
 z=torch.from_numpy(z)
 #unfold coordinates
-Nc = 16 #patch size
+Nc = 10 #patch size
 x=x.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
 y=y.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
 z=z.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
@@ -70,14 +71,14 @@ FA = FA.mean(dim=-1)
 
 ##get coordinates for data extraction
 N=20 #---------------number of training patches (3D images)-----------------------#
-occ_inds = np.where(mask>0.4)[0] #extract patches based on mean FA
-oi=np.random.randint(0,len(occ_inds),N) #get random patches
+occ_inds = np.where(FA>0.2)[0] #extract patches based on mean FA or mask
+oi=np.random.randint(0,len(occ_inds)-1,N) #get random patches
 xpp=x[occ_inds[oi]] #extract coordinates
 ypp=y[occ_inds[oi]]
 zpp=z[occ_inds[oi]]
 
 ## generate training data
-H = 5 #----------------dimensions of icosahedron internal space-------------------#
+H = 7 #----------------dimensions of icosahedron internal space-------------------#
 h = H+1
 w = 5*h
 ico = icosahedron.icomesh(m=H-1) 
@@ -147,12 +148,15 @@ class conv3d(Module):
         super(conv3d,self).__init__()
         self.activation= activation
         self.conv = Conv3d(Cin,Cout,3,padding=1)
+        self.norm = InstanceNorm3d(Cout)
 
     def forward(self,x):
         if self.activation!=None:
             x=self.activation(self.conv(x))
+            x=self.norm(x)
         else:
             x=self.conv(x)
+            x = self.norm(x)
         return x
 
 #this makes the list for 3d convs
@@ -180,13 +184,28 @@ class conv3dList(Module):
         for i,conv in enumerate(self.conv3ds):
             if i==0:
                 #input size is [B,Nc,Nc,Nc,h,w]
-                x = x.view([B,Nc,Nc,Nc,C*h*w]).moveaxis(-1,1)
+                
+                ##-----directions as channels
+                #x = x.view([B,Nc,Nc,Nc,C*h*w]).moveaxis(-1,1) # Instead of this, maybe a simpler approach is to put h*w in batch dimension
+                
+                ## -----directions as batch
+                x = x.moveaxis((-2,-1),(1,2)).view([B*h*w,C,Nc,Nc,Nc])
+                
                 x = conv(x)
+
             elif i==len(self.conv3ds)-1:
                 x=conv(x)
-                x = x.moveaxis(1,-1)
-                C = int(self.filterlist[-1]/(h*w)) #is this right?
-                x = x.view([B,Nc,Nc,Nc,C,h,w]) #this will be input for internal space convolutions
+                
+                ## -------directions as channels
+                #x = x.moveaxis(1,-1)
+                #C = int(self.filterlist[-1]/(h*w)) #is this right?
+                #x = x.view([B,Nc,Nc,Nc,C,h,w]) #this will be input for internal space convolutions
+                
+                ## ------directions as batch
+                #incomping shape is [batch*h*w,C,Nc,Nc,Nc]
+                C = x.shape[1]  
+                x=x.view(B,h,w,C,Nc,Nc,Nc)
+                x = x.moveaxis((1,2,3),(-2,-1,-3))
             else:
                 x = conv(x)
         return x
@@ -201,10 +220,10 @@ class Net(Module):
         self.w = 5*(H+1)
         #self.Nc = shp[1]
         #self.Nc3 = shp[1]*shp[1]*shp[1]
-        self.conv3ds=conv3dList([1*self.h*self.w,4*self.h*self.w,4*self.h*self.w],
-                                [F.relu,F.relu])
-        self.gConvs= gnet3d(H,[4,4,4,4,4,1],shells=4,
-                            activationlist= [F.relu,F.relu,F.relu,F.relu,None])
+        self.conv3ds=conv3dList([1,4,4,4],
+                                [F.relu, F.relu,F.relu])
+        self.gConvs= gnet3d(H,[4,4,4,1],shells=4,
+                            activationlist= [F.relu,F.relu,None])
         
     def forward(self,x):
         x=self.conv3ds(x)
@@ -238,12 +257,12 @@ for epoch in range(0, 20):
         optimizer.zero_grad()
 
         #print(inputs.shape)
-        output = net(inputs.cuda())
+        output = net(inputs.cuda()).cpu()
 
-        loss = criterion(output, target.cuda())
+        loss = criterion(output, target)
         loss=loss.sum()
         print(loss)
-        loss.backward()
+        loss.cuda().backward()
         #print(net.lin3d.weight[2,2,4,4,4,3])
         #print(net.conv1.weight)
         optimizer.step()
