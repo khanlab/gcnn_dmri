@@ -114,11 +114,12 @@ class gnet(Module):
 
         return x
 
+
 class gnet3d(Module): #this module (layer) takes in a 3d patch but only convolves in internal space
-    def __init__(self,H,filterlist,shells=None,activationlist=None): #shells should be same as filterlist[0]
+    def __init__(self,H,filterlist,shells=None,activationlist=None,multigpu=False): #shells should be same as filterlist[0]
         super(gnet3d,self).__init__()
         self.filterlist = filterlist
-        self.gconvs=gNetFromList(H,filterlist,shells,activationlist= activationlist)
+        self.gconvs=gNetFromList(H,filterlist,shells,activationlist= activationlist,multigpu=multigpu)
         self.pool = opool(filterlist[-1])
 
     def forward(self,x):
@@ -131,11 +132,13 @@ class gnet3d(Module): #this module (layer) takes in a 3d patch but only convolve
         # print('we are in gnet3d')
         # print(x.shape)
         x = x.view((B*Nc*Nc*Nc,C,h,w)) #patch voxels go in as a batch
+        #x = x.reshape((B*Nc*Nc*Nc,C,h,w)) #patch voxels go in as a batch
         # print(x.shape)
         x = self.gconvs(x) #usual g conv
         x = self.pool(x) # shape [batch,Nc^3,filterlist[-1],h,w
         #x = x.view([B,Nc,Nc,Nc,self.filterlist[-1],h,w])
         x = x.view([B,Nc,Nc,Nc,h,w]) #this is under the assumption that last filter is 1 with None activation
+        #x = x.reshape([B,Nc,Nc,Nc,h,w]) #this is under the assumption that last filter is 1 with None activation
         # print(x.shape)
         return x
 
@@ -192,6 +195,7 @@ class conv3dList(Module):
                 
                 ## -----directions as batch
                 x = x.moveaxis((-2,-1),(1,2)).view([B*h*w,C,Nc,Nc,Nc])
+                #x = x.moveaxis((-2,-1),(1,2)).reshape([B*h*w,C,Nc,Nc,Nc])
                 
                 x = conv(x)
 
@@ -207,6 +211,7 @@ class conv3dList(Module):
                 #incomping shape is [batch*h*w,C,Nc,Nc,Nc]
                 C = x.shape[1]  
                 x=x.view(B,h,w,C,Nc,Nc,Nc)
+                #x=x.reshape(B,h,w,C,Nc,Nc,Nc)
                 x = x.moveaxis((1,2,3),(-2,-1,-3))
             else:
                 x = conv(x)
@@ -231,7 +236,7 @@ class residualnet(Module):
         return x
 
 class residualnet5d(Module):
-    def __init__(self,filterlist3d,activationlist3d,filterlist2d,activationlist2d,H,shells):
+    def __init__(self,filterlist3d,activationlist3d,filterlist2d,activationlist2d,H,shells,multigpu=False):
         super(residualnet5d,self).__init__()
         #params
         self.flist3d = filterlist3d
@@ -242,19 +247,36 @@ class residualnet5d(Module):
         self.h = H+1
         self.w = 5*(H+1)
         self.shells =shells
+        self.multigpu = multigpu
 
-        #network layers 
-        self.conv3ds = conv3dList(filterlist3d,activationlist3d)
-        self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d)
+        # #network layers 
+        # if multigpu:
+        #     print('Using multi gpus')
+        #     self.conv3ds = conv3dList(filterlist3d,activationlist3d).cuda(0)
+        #     self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d).cuda(1)
+        # else:
+        self.conv3ds = conv3dList(filterlist3d,activationlist3d).cuda(0)
+        self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d,multigpu=multigpu)
+        
 
     def forward(self,x):
+        
+        #if self.multigpu:
+        #    x = x.cuda(0)
+
         x=self.conv3ds(x)
+        
+        #if self.multigpu:
+        #    x = x.cuda(1)
+          
+    
         x=self.gconvs(x)
+        
         return x
 
 
 class trainer:
-    def __init__(self,modelParams,Xtrain=None,Ytrain=None):
+    def __init__(self,modelParams,Xtrain=None,Ytrain=None,multigpu=False):
         """
         Class to create and train networks
         :param modelParams: A dict with all network parameters
@@ -265,6 +287,7 @@ class trainer:
         self.Xtrain=Xtrain
         self.Ytrain=Ytrain
         self.net=[]
+        self.multigpu = multigpu
 
     def makeNetwork(self):
         if self.modelParams['misc']=='residual':
@@ -276,14 +299,14 @@ class trainer:
                                   self.modelParams['gfilterlist'],
                                   self.modelParams['gactivationlist'],
                                   self.modelParams['H'],
-                                  self.modelParams['shells'])
+                                  self.modelParams['shells'],
+                                  multigpu=self.multigpu)
         else:
             self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
                             self.modelParams['shells'],self.modelParams['H'],
                             self.modelParams['lactivationlist'],
                             self.modelParams['gactivationlist'])
-        self.net = self.net.cuda()
-
+        #self.net = self.net.cuda()
     def train(self):
         outpath = path_from_modelParams(self.modelParams)
         lossname = outpath + 'loss.png'
@@ -305,12 +328,17 @@ class trainer:
             print(epoch)
             for n, (inputs, targets) in enumerate(trainloader, 0):
                 optimizer.zero_grad()
-
-                output = self.net(inputs.cuda()).cpu()
+                if self.multigpu:
+                    torch.cuda.empty_cache()
+                    output = self.net(inputs.cuda(0))#.cpu()
+                else:
+                    torch.cuda.empty_cache()
+                    output = self.net(inputs.cuda()).cpu()
                 loss = criterion(output, targets)
                 loss = loss.sum()
                 print(loss)
-                loss.cuda().backward()
+                #loss.cuda(0).backward()
+                loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
             else:
@@ -323,7 +351,7 @@ class trainer:
 
             scheduler.step(running_loss)
             running_loss = 0.0
-            if (epoch % 3) == 2:
+            if (epoch % 1) == 0:
                 fig_err, ax_err = plt.subplots()
                 ax_err.plot(epochs_list, np.log10(loss_list))
                 if lossname is None:

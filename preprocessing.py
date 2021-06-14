@@ -65,11 +65,16 @@ class training_data:
         N=N_train
 
         ##get coordinates for data extraction
-        occ_inds = np.where(((self.mask>0.3) & (self.FA>0.0)))[0] #extract patches based on mean FA
+        occ_inds = np.where(((self.mask>0.3) & (self.FA>0.1)))[0] #extract patches based on mean FA
+        #occ_inds = np.where(self.mask>0.3)[0] #extract patches based on mean FA
+        print('Max patches available are ', len(occ_inds))
         #occ_inds = np.where(self.mask>0.5)[0]
-        if N == len(occ_inds):
-            raise ValueError('requested patches exceed those')
+        if N >= len(occ_inds):
+            #raise ValueError('requested patches exceed those availale.')
+            print('requested patches exceed those availale')
+            N = len(occ_inds)
         oi=np.random.randint(0,len(occ_inds),N) #get random patches
+        print('using %d patches' % len(oi))
         xpp=self.x[occ_inds[oi]] #extract coordinates
         ypp=self.y[occ_inds[oi]]
         zpp=self.z[occ_inds[oi]]

@@ -44,7 +44,7 @@ class predicting_data:
         self.in_shp = self.diff_input.vol.shape
 
 
-        self.N_patch= 16 #this is multiple of 144 and 176 (so have to pad HCP diffusion)
+        self.N_patch= 16
         self.H = H
 
         self.make_coords()
@@ -120,20 +120,22 @@ class predicting_data:
             self.zp = zp 
         
 class residual5dPredictor:
-    def __init__(self,datapath,netpath):
+    def __init__(self,datapath,netpath,multigpu=False):
         self.datapath = datapath
         self.netpath = netpath
         self.modelParams = []
         self.pred_data = []
+        self.multigpu=multigpu
 
         self.loadNetwork()
         self.generate_predicting_data()
+
 
     def loadNetwork(self):
         #load pkl file for model params and initiate network
         path=self.netpath
         self.modelParams=load_obj(path)
-        trnr=training.trainer(self.modelParams,0,0)
+        trnr=training.trainer(self.modelParams,0,0,multigpu=self.multigpu)
         trnr.makeNetwork()
         self.net=trnr.net
         self.net.load_state_dict(torch.load(path+ 'net'))
@@ -167,7 +169,8 @@ class residual5dPredictor:
 
         print('Number of bdirs is: ', N)
 
-        N_random=2*w
+        #N_random=2*w
+        N_random=N-5
         rng=np.random.default_rng()
         inds=rng.choice(N-2,size=N_random,replace=False)+1
         inds[0]=0
