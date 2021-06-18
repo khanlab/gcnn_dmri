@@ -239,6 +239,41 @@ class icomesh:
         self.Y_in_grid = self.Y_in_grid[I[0, :, :], J[0, :, :]]
         self.Z_in_grid = self.Z_in_grid[I[0, :, :], J[0, :, :]]
 
+        #need a basis to extract the "core" of the 2d plane
+        #we can omit corners of icosahedron and set them to zero
+        self.core_basis = np.zeros_like(self.X_in_grid)
+        for c in range(0,5):
+            self.core_basis[1:h-1,c*h+1:c*h+h]=1
+
+        self.core_basis_inv = np.zeros_like(self.X_in_grid)
+        a ,b= np.where(self.core_basis==1)
+        inds = np.arange(len(a))
+        self.core_basis_inv[a,b]=inds
+
+        self.I_internal = I[0,:,:]
+        self.J_internal = J[0,:,:]
+        strip_xy = np.arange(0, H - 1)
+        self.zeros = np.zeros_like(self.I_internal) #this is for corners that should be remain zero
+        for c in range(0, 5):  # for padding
+
+            c_left = c
+            x_left = -1
+            y_left = strip_xy
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+
+            c_right = (c - 1) % 5
+            x_right = H - 2 - strip_xy
+            y_right = H - 2
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+
+            self.I_internal[i_left, j_left] = self.I_internal[i_right, j_right]
+            self.J_internal[i_left, j_left] = self.J_internal[i_right, j_right]
+
+
+            self.zeros[ 0,c*h]=1 #top left
+            self.zeros[-1,c*h]=1 #bottom left
+            self.zeros[-1,c*h+h-1]=1 #bottom right
+
     # def plot_icosohedron(self,maxface=22):
     #     """
     #     A function that plots the icosahedron with i,j labels

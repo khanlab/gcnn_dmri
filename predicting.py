@@ -109,23 +109,36 @@ class predicting_data:
             shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
             X = X.reshape(shp)
             #standardize inputs
-            self.Xmean = X.mean()
-            self.Xstd = X.std()
-            X = (X - self.Xmean)/self.Xstd
+            # self.Xmean = X.mean()
+            # self.Xstd = X.std()
+            # X = (X - self.Xmean)/self.Xstd
+            # X = torch.from_numpy(X).contiguous().float()
+            self.Xmax = np.nanmax(X)
+            self.Xmin = np.nanmin(X)
+            X = (X - np.nanmin(X)) / (np.nanmax(X) - np.nanmin(X))
             X = torch.from_numpy(X).contiguous().float()
-            
+
+            shp = X.shape
+            X = X.view(shp[0:4] + (1,) + shp[-2:])
+
             self.X = X
             self.xp = xp
             self.yp = yp
             self.zp = zp 
         
 class residual5dPredictor:
-    def __init__(self,datapath,netpath,multigpu=False):
+    def __init__(self,datapath,netpath,multigpu=False,core=None,core_inv=None,
+                 I=None,J=None,zeros=None):
         self.datapath = datapath
         self.netpath = netpath
         self.modelParams = []
         self.pred_data = []
         self.multigpu=multigpu
+        self.core = core
+        self.core_inv = core_inv
+        self.I = I
+        self.J = J
+        self.zeros = zeros
 
         self.loadNetwork()
         self.generate_predicting_data()
@@ -135,7 +148,13 @@ class residual5dPredictor:
         #load pkl file for model params and initiate network
         path=self.netpath
         self.modelParams=load_obj(path)
-        trnr=training.trainer(self.modelParams,0,0,multigpu=self.multigpu)
+        trnr=training.trainer(self.modelParams,0,0,
+                              core=self.core,
+                              core_inv=self.core_inv,
+                              I=self.I,
+                              J=self.J,
+                              zeros=self.zeros,
+                              multigpu=self.multigpu)
         trnr.makeNetwork()
         self.net=trnr.net
         self.net.load_state_dict(torch.load(path+ 'net'))
@@ -157,7 +176,8 @@ class residual5dPredictor:
         out = np.zeros((self.pred_data.diff_input.vol.shape[0:3] + (h,w)))
         oldshp = pred.shape
         pred = pred.view(-1,h,w)
-        pred = pred*self.pred_data.Xstd + self.pred_data.Xmean
+        #pred = pred*self.pred_data.Xstd + self.pred_data.Xmean
+        pred = pred * (self.pred_data.Xmax - self.pred_data.Xmin) + self.pred_data.Xmin
 
         out[self.pred_data.xp,self.pred_data.yp,self.pred_data.zp] = pred
 
