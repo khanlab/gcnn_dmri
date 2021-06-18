@@ -3,8 +3,8 @@ from gPyTorch import opool
 from torch.nn.modules.module import Module
 import numpy as np
 
-import matplotlib
-matplotlib.use('Agg')
+#import matplotlib
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
@@ -15,6 +15,7 @@ import pickle
 from torch.nn import InstanceNorm3d
 from torch.nn import Conv3d
 from torch.nn import ModuleList
+from torch.nn import DataParallel
 
 
 def path_from_modelParams(modelParams):
@@ -49,28 +50,6 @@ def path_from_modelParams(modelParams):
 
     return modelParams['basepath']+ path
 
-class lNetFromList(Module):
-    """
-    This class will give us a linear network from a list of filters
-    """
-    def __init__(self,filterlist,activationlist=None):
-        super(lNetFromList,self).__init__()
-        self.activationlist=activationlist
-        self.lins=[]
-        if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
-            self.activationlist=[None for i in range(0,len(filterlist)-1)]
-        for i in range(0,len(filterlist)-1):
-            self.lins.append(Linear(filterlist[i],filterlist[i+1]))
-        self.lins=ModuleList(self.lins)
-
-    def forward(self,x):
-        for idx,lin in enumerate(self.lins):
-            activation=self.activationlist[idx]
-            if activation == None:
-                x=lin(x)
-            else:
-                x=activation(lin(x))
-        return x
 
 def get_accuracy(net,input_val,target_val):
     x=net(input_val)
@@ -83,63 +62,96 @@ def get_accuracy(net,input_val,target_val):
     accuracy = torch.rad2deg( torch.arccos( accuracy.sum(dim=-1).abs()))
     return accuracy.mean().detach().cpu()
 
-class gnet(Module):
+
+class in3d(Module):
     """
-    This will create the entire network
+    Here we are just moving the 2d space into the batch dimension
     """
-    def __init__(self,linfilterlist,gconfilterlist,shells,H,lactivationlist=None,gactivationlist=None):
-        super(gnet,self).__init__()
-        self.input=input
-        self.linfilterlist=linfilterlist
-        self.gconfilterlist=gconfilterlist
-        self.lactivationlist=lactivationlist
-        self.gactivationlist=gactivationlist
-        self.shells=shells
-        self.H=H
-        self.h = 5*(self.H+1)
-        self.w = self.H+1
-        self.last = self.gconfilterlist[-1]
-
-        self.gConvs=gNetFromList(self.H,self.gconfilterlist,shells,activationlist=gactivationlist)
-        self.pool = opool(self.last)
-        self.mx = MaxPool2d([2,2])
-        self.lins=lNetFromList(linfilterlist,activationlist=lactivationlist)
-
-    def forward(self,x):
-        x = self.gConvs(x)
-        x = self.pool(x)
-        x = self.mx(x)
-        x = x.view(-1,int(self.last * self.h * self.w / 4))
-        x = self.lins(x)
-
-        return x
-
-
-class gnet3d(Module): #this module (layer) takes in a 3d patch but only convolves in internal space
-    def __init__(self,H,filterlist,shells=None,activationlist=None,multigpu=False): #shells should be same as filterlist[0]
-        super(gnet3d,self).__init__()
-        self.filterlist = filterlist
-        self.gconvs=gNetFromList(H,filterlist,shells,activationlist= activationlist,multigpu=multigpu)
-        self.pool = opool(filterlist[-1])
+    def __init__(self,core):
+        super(in3d, self).__init__()
+        self.core = core
 
     def forward(self,x):
         #x will have shape [batch,Nc,Nc,Nc,C,h,w]
-        B=x.shape[0]
+        B = x.shape[0]
+        Nc = x.shape[1]
+        C = x.shape[-3]
+        x=x[:,:,:,:,:,self.core==1]
+        Ncore = x.shape[-1]
+        x = x.moveaxis((-1,-2),(1,2))
+        x=x.contiguous()
+        x = x.view([B*Ncore,C,Nc,Nc,Nc])
+        return x
+
+class out3d(Module):
+    """
+    Inverse of in3d
+    """
+    def __init__(self,B,Nc,Ncore,core_inv,I,J,zeros):
+        super(out3d, self).__init__()
+        self.B = B
+        self.Nc = Nc
+        self.Ncore = Ncore
+        self.core_inv = core_inv
+        self.I = I
+        self.J = J
+        self.zeros = zeros
+
+    def forward(self,x):
+        #x will have shape [B*Ncore, C, Nc, Nc, Nc]
+        C = x.shape[1]
+        x = x.view(self.B,self.Ncore,C,self.Nc,self.Nc,self.Nc)
+        x = x[:, self.core_inv, :, :, :, :]  # shape is [B,h,w,C,Nc,Nc,Nc])
+        x = x[:, self.I, self.J, :, :, :, :] #padding
+        x = x.moveaxis((1, 2, 3), (-2, -1, -3))
+        x[:, :, :, :, :, self.zeros == 1] = 0 #zeros
+
+        return x
+
+class in2d(Module):
+    """
+    Moving 3d dimensions to batch dimension
+    """
+    def __init__(self):
+        super(in2d, self).__init__()
+
+    def forward(self,x):
+        #x has shape [batch, Nc, Nc, Nc, C, h, w]
+        B = x.shape[0]
         Nc = x.shape[1]
         C = x.shape[-3]
         h = x.shape[-2]
         w = x.shape[-1]
-        # print('we are in gnet3d')
-        # print(x.shape)
         x = x.view((B*Nc*Nc*Nc,C,h,w)) #patch voxels go in as a batch
-        #x = x.reshape((B*Nc*Nc*Nc,C,h,w)) #patch voxels go in as a batch
-        # print(x.shape)
+        return x
+
+class out2d(Module):
+    """
+    inverse of in2d
+    """
+    def __init__(self,B,Nc,Cout):
+        super(out2d, self).__init__()
+        self.B = B
+        self.Nc = Nc
+        self.Cout= Cout
+
+    def forward(self,x):
+        h=x.shape[-2]
+        w=x.shape[-1]
+        x = x.view([self.B,self.Nc,self.Nc,self.Nc,self.Cout,h,w])
+        return x
+
+
+class gnet3d(Module): #this module (layer) takes in a 3d patch but only convolves in internal space
+    def __init__(self,H,filterlist,shells=None,activationlist=None): #shells should be same as filterlist[0]
+        super(gnet3d,self).__init__()
+        self.filterlist = filterlist
+        self.gconvs=gNetFromList(H,filterlist,shells,activationlist= activationlist)
+        self.pool = opool(filterlist[-1])
+
+    def forward(self,x):
         x = self.gconvs(x) #usual g conv
         x = self.pool(x) # shape [batch,Nc^3,filterlist[-1],h,w
-        #x = x.view([B,Nc,Nc,Nc,self.filterlist[-1],h,w])
-        x = x.view([B,Nc,Nc,Nc,h,w]) #this is under the assumption that last filter is 1 with None activation
-        #x = x.reshape([B,Nc,Nc,Nc,h,w]) #this is under the assumption that last filter is 1 with None activation
-        # print(x.shape)
         return x
 
 #this is a class to make lists out of
@@ -147,21 +159,22 @@ class conv3d(Module):
     """
     This class combines conv3d and batch norm layers and applies a provided activation
     """
-    def __init__(self,Cin,Cout,activation=None):
+    def __init__(self,Cin,Cout,activation=None,norm=True):
         super(conv3d,self).__init__()
         self.activation= activation
         self.conv = Conv3d(Cin,Cout,3,padding=1)
         self.norm = InstanceNorm3d(Cout)
-
+        self.batch_norm = norm
 
     def forward(self,x):
         if self.activation!=None:
             x=self.activation(self.conv(x))
-            x=self.norm(x)
-
         else:
             x=self.conv(x)
-            x=self.norm(x)
+
+        if self.batch_norm:
+            x = self.norm(x)
+
         return x
 
 #this makes the list for 3d convs
@@ -170,113 +183,64 @@ class conv3dList(Module):
         super(conv3dList,self).__init__()
         self.conv3ds=[]
         self.filterlist = filterlist
+        self.activationlist = activationlist
         if activationlist is None:
             self.activationlist = [None for i in range(0,len(filterlist)-1)]
         for i in range(0,len(filterlist)-1):
             if i==0:
-                self.conv3ds=[conv3d(filterlist[i],filterlist[i+1],activationlist[i])]
+                self.conv3ds=[conv3d(filterlist[i],filterlist[i+1],self.activationlist[i])]
             else:
-                self.conv3ds.append(conv3d(filterlist[i],filterlist[i+1],activationlist[i]))
+                norm = True
+                if i == len(filterlist) - 2:
+                    norm = False
+                self.conv3ds.append(conv3d(filterlist[i],filterlist[i+1],self.activationlist[i],norm=norm))
         self.conv3ds = ModuleList(self.conv3ds)
 
     def forward(self,x):
-        H=x.shape[-2]-1
-        h = H + 1
-        w = 5 * (H + 1)
-        Nc = x.shape[1]
-        B = x.shape[0]
-        C=1#x.shape[-3]
         for i,conv in enumerate(self.conv3ds):
-            if i==0:
-                #input size is [B,Nc,Nc,Nc,h,w]
-                
-                ##-----directions as channels
-                #x = x.view([B,Nc,Nc,Nc,C*h*w]).moveaxis(-1,1) # Instead of this, maybe a simpler approach is to put h*w in batch dimension
-                
-                ## -----directions as batch
-                x = x.moveaxis((-2,-1),(1,2)).view([B*h*w,C,Nc,Nc,Nc])
-                #x = x.moveaxis((-2,-1),(1,2)).reshape([B*h*w,C,Nc,Nc,Nc])
-                
-                x = conv(x)
-
-            elif i==len(self.conv3ds)-1:
-                x=conv(x)
-                
-                ## -------directions as channels
-                #x = x.moveaxis(1,-1)
-                #C = int(self.filterlist[-1]/(h*w)) #is this right?
-                #x = x.view([B,Nc,Nc,Nc,C,h,w]) #this will be input for internal space convolutions
-                
-                ## ------directions as batch
-                #incomping shape is [batch*h*w,C,Nc,Nc,Nc]
-                C = x.shape[1]  
-                x=x.view(B,h,w,C,Nc,Nc,Nc)
-                #x=x.reshape(B,h,w,C,Nc,Nc,Nc)
-                x = x.moveaxis((1,2,3),(-2,-1,-3))
-            else:
-                x = conv(x)
+            x = conv(x)
         return x
 
-
-
-class residualnet(Module):
-    def __init__(self,gfilterlist,shells,H,gactivationlist=None):
-        super(residualnet,self).__init__()
-        self.gfilterlist=gfilterlist
-        self.gactivationlist=gactivationlist
-        self.shells=shells
-        self.H=H
-        self.gConvs=gNetFromList(self.H,self.gfilterlist,shells,activationlist=self.gactivationlist)
-        self.opool = opool(self.gfilterlist[-1])
-
-    def forward(self,x):
-        x=self.gConvs(x)
-        x=self.opool(x)
-
-        return x
 
 class residualnet5d(Module):
-    def __init__(self,filterlist3d,activationlist3d,filterlist2d,activationlist2d,H,shells,multigpu=False):
+    def __init__(self,filterlist3d,activationlist3d,filterlist2d,activationlist2d,H,shells,B,Nc,Ncore,core,core_inv,I,J,
+                 zeros):
         super(residualnet5d,self).__init__()
         #params
         self.flist3d = filterlist3d
         self.alist3d = activationlist3d
         self.flist2d = filterlist2d
         self.alist2d = activationlist2d
-        self.H = H 
-        self.h = H+1
-        self.w = 5*(H+1)
-        self.shells =shells
-        self.multigpu = multigpu
 
-        # #network layers 
-        # if multigpu:
-        #     print('Using multi gpus')
-        #     self.conv3ds = conv3dList(filterlist3d,activationlist3d).cuda(0)
-        #     self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d).cuda(1)
-        # else:
-        self.conv3ds = conv3dList(filterlist3d,activationlist3d).cuda(0)
-        self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d,multigpu=multigpu)
-        
+        self.layer_in3d = in3d(core)
+        self.layer_out3d = out3d(B,Nc,Ncore,core_inv,I,J,zeros)
+        self.layer_in2d = in2d()
+        self.layer_out2d = out2d(B,Nc,self.flist2d[-1])
+
+
+        self.conv3ds = conv3dList(filterlist3d,activationlist3d)
+        self.gconvs = gnet3d(H,filterlist2d,shells,activationlist2d)
+
+        self.conv3ds = DataParallel(self.conv3ds)
+        self.gconvs = DataParallel(self.gconvs)
 
     def forward(self,x):
-        
-        #if self.multigpu:
-        #    x = x.cuda(0)
 
+        x=self.layer_in3d(x)
         x=self.conv3ds(x)
-        
-        #if self.multigpu:
-        #    x = x.cuda(1)
-          
-    
+        x=self.layer_out3d(x)
+
+        x=self.layer_in2d(x)
         x=self.gconvs(x)
-        
+        x=self.layer_out2d(x)
+
         return x
 
 
 class trainer:
-    def __init__(self,modelParams,Xtrain=None,Ytrain=None,multigpu=False):
+    def __init__(self,modelParams,Xtrain=None,Ytrain=None,B=None,Nc=None,Ncore=None,core=None,core_inv=None,I=None,\
+                                                                                                            J=None,\
+                                                                                                        zeros=None):
         """
         Class to create and train networks
         :param modelParams: A dict with all network parameters
@@ -287,12 +251,17 @@ class trainer:
         self.Xtrain=Xtrain
         self.Ytrain=Ytrain
         self.net=[]
-        self.multigpu = multigpu
+        self.B = B
+        self.Nc = Nc
+        self.Ncore = Ncore
+        self.core = core
+        self.core_inv = core_inv
+        self.I = I
+        self.J = J
+        self.zeros = zeros
+
 
     def makeNetwork(self):
-        if self.modelParams['misc']=='residual':
-            self.net = residualnet(self.modelParams['gfilterlist'],self.modelParams['shells'],self.modelParams['H'],
-                                   self.modelParams['gactivationlist'])
         if self.modelParams['misc']=='residual5d':
             self.net = residualnet5d(self.modelParams['filterlist3d'],
                                   self.modelParams['activationlist3d'],
@@ -300,13 +269,15 @@ class trainer:
                                   self.modelParams['gactivationlist'],
                                   self.modelParams['H'],
                                   self.modelParams['shells'],
-                                  multigpu=self.multigpu)
-        else:
-            self.net = gnet(self.modelParams['linfilterlist'],self.modelParams['gfilterlist'] ,
-                            self.modelParams['shells'],self.modelParams['H'],
-                            self.modelParams['lactivationlist'],
-                            self.modelParams['gactivationlist'])
-        #self.net = self.net.cuda()
+                                  self.B,
+                                  self.Nc,
+                                  self.Ncore,
+                                  self.core,
+                                  self.core_inv,
+                                  self.I,
+                                  self.J,
+                                  self.zeros)
+
     def train(self):
         outpath = path_from_modelParams(self.modelParams)
         lossname = outpath + 'loss.png'
@@ -328,16 +299,12 @@ class trainer:
             print(epoch)
             for n, (inputs, targets) in enumerate(trainloader, 0):
                 optimizer.zero_grad()
-                if self.multigpu:
-                    torch.cuda.empty_cache()
-                    output = self.net(inputs.cuda(0))#.cpu()
-                else:
-                    torch.cuda.empty_cache()
-                    output = self.net(inputs.cuda()).cpu()
+                torch.cuda.empty_cache()
+                output = self.net(inputs.cuda())
                 loss = criterion(output, targets)
                 loss = loss.sum()
                 print(loss)
-                #loss.cuda(0).backward()
+                #print(self.net.gconvs.gconvs.gConvs[-1].conv.weight[0, 0])
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()

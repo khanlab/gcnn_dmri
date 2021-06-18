@@ -307,13 +307,15 @@ def apply_weight_basis(weights,basis=None,basis_t=None):
     """
     Cout=weights.shape[0]
     Cin=weights.shape[1]
+    device = weights.device.type
     if basis_t is None:
-        weights_e=torch.cat([weights,torch.zeros(weights.shape[0:2]+(1,)).cuda(weights.device.index)],dim=-1)[:,:,basis]
+        weights_e=torch.cat([weights,torch.zeros(weights.shape[0:2]+(1,)).to(device)],dim=-1)[:,:,basis]
         #we have to stack the orientation channels (!)
         weights_e=weights_e.permute(0,2,1,3,4).reshape(Cout*12,Cin,3,3)
         return weights_e
     else:
-        weights_e = torch.cat([weights, torch.zeros(weights.shape[0:2] + (12,1)).cuda(weights.device.index)], dim=-1)[:,:, basis_t, basis]
+        weights_e = torch.cat([weights, torch.zeros(weights.shape[0:2] + (12,1)).to(device)], dim=-1)[:,:, basis_t,
+                    basis]
         #we have to stack the orientation channels (!)
         weights_e = weights_e.permute(0,3,1,2,4,5).reshape(Cout*12,Cin*12,3,3)
         return weights_e

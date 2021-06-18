@@ -88,6 +88,9 @@ class training_data:
         xp= xpp.reshape(-1).numpy() #fully flattened coordinates
         yp= ypp.reshape(-1).numpy()
         zp= zpp.reshape(-1).numpy()
+        self.xp = xp
+        self.yp = yp
+        self.zp = zp
         voxels=np.asarray([xp,yp,zp]).T #putting them in one array
         #inputs
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
@@ -105,6 +108,13 @@ class training_data:
         X = torch.from_numpy(X).contiguous().float()
         Y = (Y - Y.mean())/Y.std()
         Y = torch.from_numpy(Y).contiguous().float()
+
+        # X = (X - np.nanmin(X))/(np.nanmax(X)-np.nanmin(X))
+        # X = torch.from_numpy(X).contiguous().float()
+        #
+        # Y = (Y - np.nanmin(Y))/(np.nanmax(Y)-np.nanmin(Y))
+        # Y = torch.from_numpy(Y).contiguous().float()
+
 
         self.X = X
         self.Y = Y
