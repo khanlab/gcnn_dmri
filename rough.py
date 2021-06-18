@@ -144,9 +144,9 @@ test = trnr.Xtrain
 
 plt.imshow(test[5,5,0,10,0])
 plt.figure()
-plt.imshow(Y[0,5,5,10,0])
+plt.imshow(Y[5,5,0,10,0])
 
-this_test=test[0].view((1,)+test.shape[1:])
+this_test=test[5].view((1,)+test.shape[1:])
 out =this_test+ trnr.net(this_test.cuda())
 plt.figure()
 plt.imshow(out[0,5,5,10,0].detach().numpy())
