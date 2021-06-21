@@ -7,7 +7,7 @@ import numpy as np
 
 
 class training_data:
-    def __init__(self,inputpath,dtipath, maskpath, H, N_train):
+    def __init__(self,inputpath,dtipath, maskpath, H, N_train, Nc=16):
         self.inputpath = inputpath
         self.dtipath = dtipath 
         self.maskpath = maskpath
@@ -16,7 +16,7 @@ class training_data:
         self.dti=diffusion.dti(self.dtipath,self.maskpath)
 
         self.in_shp = self.diff_input.vol.shape
-        self.N_patch= 16 #this is multiple of 144 and 176 (so have to pad HCP diffusion)
+        self.N_patch= Nc #this is multiple of 144 and 176 (so have to pad HCP diffusion)
         self.H = H
 
         self.N_train=N_train
@@ -65,7 +65,7 @@ class training_data:
         N=N_train
 
         ##get coordinates for data extraction
-        occ_inds = np.where(((self.mask>0.3) & (self.FA>0.1)))[0] #extract patches based on mean FA
+        occ_inds = np.where(((self.mask>0.1) & (self.FA>0.0)))[0] #extract patches based on mean FA
         #occ_inds = np.where(self.mask>0.3)[0] #extract patches based on mean FA
         print('Max patches available are ', len(occ_inds))
         #occ_inds = np.where(self.mask>0.5)[0]
@@ -93,10 +93,12 @@ class training_data:
         self.zp = zp
         voxels=np.asarray([xp,yp,zp]).T #putting them in one array
         #inputs
+        self.FA_on_points = self.dti.FA.get_fdata()[self.xp,self.yp,self.zp]
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
         S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
         X = X[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
         shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
+        self.FA_on_points = torch.from_numpy(self.FA_on_points).reshape(xpp.shape)
         X = X.reshape(shp)
         #output (labels)
         Y=self.dti.icoSignalFromDti(self.ico)

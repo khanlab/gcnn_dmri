@@ -3,8 +3,8 @@ from gPyTorch import opool
 from torch.nn.modules.module import Module
 import numpy as np
 
-#import matplotlib
-#matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
@@ -238,7 +238,7 @@ class residualnet5d(Module):
 
 
 class trainer:
-    def __init__(self,modelParams,Xtrain=None,Ytrain=None,B=None,Nc=None,Ncore=None,core=None,core_inv=None,I=None,\
+    def __init__(self,modelParams,Xtrain=None,Ytrain=None,FA=None,B=None,Nc=None,Ncore=None,core=None,core_inv=None,I=None,\
                                                                                                             J=None,\
                                                                                                         zeros=None):
         """
@@ -259,7 +259,15 @@ class trainer:
         self.I = I
         self.J = J
         self.zeros = zeros
+        self.FA = FA
 
+    def mul_by_FA(inputs,targets,FA):
+        h = inputs.shape[-2]
+        w = inputs.shape[-1]
+        inputs = inputs.view(-1,h*w)
+        targets = targets.view(-1,h*w)
+        FA = FA.view(-1)
+        inputs= torch 
 
     def makeNetwork(self):
         if self.modelParams['misc']=='residual5d':
@@ -289,7 +297,7 @@ class trainer:
                                       patience=self.modelParams['patience'],
                                       verbose=True)
         running_loss = 0
-        train = torch.utils.data.TensorDataset(self.Xtrain, self.Ytrain)
+        train = torch.utils.data.TensorDataset(self.Xtrain, self.Ytrain,self.FA)
         trainloader = DataLoader(train, batch_size=self.modelParams['batch_size'])
 
         epochs_list = []
@@ -297,11 +305,14 @@ class trainer:
 
         for epoch in range(0, self.modelParams['Nepochs']):
             print(epoch)
-            for n, (inputs, targets) in enumerate(trainloader, 0):
+            for n, (inputs, targets,FA) in enumerate(trainloader, 0):
                 optimizer.zero_grad()
                 torch.cuda.empty_cache()
                 output = self.net(inputs.cuda())
-                loss = criterion(output, targets)
+                output = FA[:,:,:,:,None,None,None].to(output.device.type)*output
+                targets = FA[:,:,:,:,None,None,None].to(targets.device.type)*targets
+                loss = criterion(output, targets.cuda())
+                print(loss.shape)
                 loss = loss.sum()
                 print(loss)
                 #print(self.net.gconvs.gconvs.gConvs[-1].conv.weight[0, 0])

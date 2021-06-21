@@ -37,14 +37,14 @@ def normalize(Ypredict):
 
 
 class predicting_data:
-    def __init__(self, inputpath, H):
+    def __init__(self, inputpath, H,N_patch=16):
         
         self.inputpath = inputpath
         self.diff_input = diffusion.diffVolume(inputpath)
         self.in_shp = self.diff_input.vol.shape
 
 
-        self.N_patch= 16
+        self.N_patch= N_patch
         self.H = H
 
         self.make_coords()
@@ -66,16 +66,25 @@ class predicting_data:
         self.z=torch.from_numpy(self.z)
 
         Nc=self.N_patch
+        
+        Nx = Nc
+        Ny = Nc
+        Nz = Nc
+        
+        if Nx >= self.x.shape[0]: Nx = self.x.shape[0]
+        if Ny >= self.y.shape[0]: Ny = self.y.shape[0]
+        if Nz >= self.z.shape[0]: Nz = self.z.shape[0]
 
-        self.x=self.x.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
-        self.y=self.y.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
-        self.z=self.z.unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+
+        self.x=self.x.unfold(0,Nx,Nx).unfold(1,Nx,Nx).unfold(2,Nx,Nx)
+        self.y=self.y.unfold(0,Ny,Ny).unfold(1,Ny,Ny).unfold(2,Ny,Ny)
+        self.z=self.z.unfold(0,Nz,Nz).unfold(1,Nz,Nz).unfold(2,Nz,Nz)
 
         self.x = self.x.reshape((-1,)+tuple(self.x.shape[-3:]))
         self.y = self.y.reshape((-1,)+tuple(self.y.shape[-3:]))
         self.z = self.z.reshape((-1,)+tuple(self.z.shape[-3:]))
 
-        mask = torch.from_numpy(self.diff_input.mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        mask = torch.from_numpy(self.diff_input.mask.get_fdata()).unfold(0,Nx,Nx).unfold(1,Ny,Ny).unfold(2,Nz,Nz)
         #flatten patch labels (indices for each patch) and patch indices (indices for voxels in patch)
         mask = mask.reshape((-1,)+ tuple(mask.shape[-3:])) #flatten patch labels
         mask = mask.reshape(mask.shape[0],-1) #flatten patch voxels
@@ -127,13 +136,15 @@ class predicting_data:
             self.zp = zp 
         
 class residual5dPredictor:
-    def __init__(self,datapath,netpath,multigpu=False,core=None,core_inv=None,
+    def __init__(self,datapath,netpath,B=None,Nc=None,Ncore=None,core=None,core_inv=None,
                  I=None,J=None,zeros=None):
         self.datapath = datapath
         self.netpath = netpath
         self.modelParams = []
         self.pred_data = []
-        self.multigpu=multigpu
+        self.B = B
+        self.Nc = Nc
+        self.Ncore = Ncore
         self.core = core
         self.core_inv = core_inv
         self.I = I
@@ -149,19 +160,21 @@ class residual5dPredictor:
         path=self.netpath
         self.modelParams=load_obj(path)
         trnr=training.trainer(self.modelParams,0,0,
+                              B=self.B,
+                              Nc = self.Nc,
+                              Ncore = self.Ncore,
                               core=self.core,
                               core_inv=self.core_inv,
                               I=self.I,
                               J=self.J,
-                              zeros=self.zeros,
-                              multigpu=self.multigpu)
+                              zeros=self.zeros)
         trnr.makeNetwork()
         self.net=trnr.net
-        self.net.load_state_dict(torch.load(path+ 'net'))
+        self.net.load_state_dict(torch.load(path+ 'net',map_location=torch.device('cpu')))
 
     def generate_predicting_data(self):
         self.H = self.modelParams['H']
-        self.pred_data=predicting_data(self.datapath,self.H)
+        self.pred_data=predicting_data(self.datapath,self.H,N_patch=self.Nc)
 
     def predict(self, outpath,batch_size=1):
         H = self.H
@@ -169,9 +182,10 @@ class residual5dPredictor:
         w = 5*h
         pred = torch.zeros_like(self.pred_data.X)
         batch_size=1
+        #device = self.net.device.type
         for i in range(0,self.pred_data.X.shape[0],batch_size):
             print(i)
-            pred[i:i+batch_size]=(self.net(self.pred_data.X[i:i+batch_size].cuda()).cpu() + self.pred_data.X[i:i+batch_size]).detach()
+            pred[i:i+batch_size]=(self.net(self.pred_data.X[i:i+batch_size].cuda() ).cpu() + self.pred_data.X[i:i+batch_size]).detach()
 
         out = np.zeros((self.pred_data.diff_input.vol.shape[0:3] + (h,w)))
         oldshp = pred.shape
@@ -182,15 +196,17 @@ class residual5dPredictor:
         out[self.pred_data.xp,self.pred_data.yp,self.pred_data.zp] = pred
 
         #make nifti
-        basis=np.zeros([h,w])
-        for c in range(0,5):
-            basis[1:H,c*h+1:(c+1)*h-1]=1
-        N=len(basis[basis==1])+1
+        # basis=np.zeros([h,w])
+        # for c in range(0,5):
+        #     basis[1:H,c*h+1:(c+1)*h-1]=1
+        # N=len(basis[basis==1])+1
+
+        N=self.Ncore
 
         print('Number of bdirs is: ', N)
 
         #N_random=2*w
-        N_random=N-5
+        N_random=N-2
         rng=np.random.default_rng()
         inds=rng.choice(N-2,size=N_random,replace=False)+1
         inds[0]=0
@@ -200,9 +216,9 @@ class residual5dPredictor:
         y_bvecs=np.zeros(N_random)
         z_bvecs=np.zeros(N_random)
 
-        x_bvecs[1:]=self.pred_data.ico.X_in_grid[basis==1].flatten()[inds[1:]]
-        y_bvecs[1:]=self.pred_data.ico.Y_in_grid[basis==1].flatten()[inds[1:]]
-        z_bvecs[1:]=self.pred_data.ico.Z_in_grid[basis==1].flatten()[inds[1:]]
+        x_bvecs[1:]=self.pred_data.ico.X_in_grid[self.core==1].flatten()[inds[1:]]
+        y_bvecs[1:]=self.pred_data.ico.Y_in_grid[self.core==1].flatten()[inds[1:]]
+        z_bvecs[1:]=self.pred_data.ico.Z_in_grid[self.core==1].flatten()[inds[1:]]
 
         bvals[1:]=1000
 
@@ -213,7 +229,7 @@ class residual5dPredictor:
 
         for p in range(0,len(i)):
             signal =out[i[p],j[p],k[p]]
-            signal = signal[basis==1].flatten()
+            signal = signal[self.core==1].flatten()
             diff_out[i[p],j[p],k[p],1:] = signal[inds[1:]]
 
         diff_out=nib.Nifti1Image(diff_out,self.pred_data.diff_input.vol.affine)

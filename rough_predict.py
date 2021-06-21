@@ -16,15 +16,14 @@ ico = icosahedron.icomesh(m=4)
 
 predictor = predicting.residual5dPredictor(datapath,netpath,
                                            B=1,
-                                           Nc=16,
+                                           Nc=1000,
                                            Ncore=100,
                                            core=ico.core_basis,
                                            core_inv=ico.core_basis_inv,
                                            zeros=ico.zeros,
                                            I=ico.I_internal,
                                            J=ico.J_internal)
-predictor.net=predictor.net.cuda()
+#predictor.net=predictor.net.cuda()
 predictor.predict('./data/')
-
 
 

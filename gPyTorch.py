@@ -79,6 +79,7 @@ class opool(Module):
         self.in_channels=in_channels
 
     def forward(self,input):
+        device = input.device.type
         batch_size=input.shape[0]
         h=input.shape[-2]
         w=input.shape[-1]
@@ -90,7 +91,7 @@ class opool(Module):
         subs = subs.reshape(3, batch_size, self.in_channels)
         for b in range(0, batch_size):
             input_pool[b, :, :, :] = input[b, subs[0, b, :], :, :].clone()
-        return input_pool#.cuda()
+        return input_pool.to(device)
 
 class gConv_gNorm(Module):
     """

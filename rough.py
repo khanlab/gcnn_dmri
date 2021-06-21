@@ -41,9 +41,9 @@ import sys
 
 ##params for data grab
 N_subjects =1#sys.argv[1]
-N_per_sub=30
-Nc=16
-sub_path = './data/downsample_cut_pad/' #sys.argv[2] #path for input subjects
+N_per_sub=300
+Nc=32
+sub_path = '/home/u2hussai/scratch/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
 bdir = str(6) #sys.argv[3] #number of bvec directions
 H=5 #lets keep this small for intial run
 h=H+1
@@ -63,36 +63,43 @@ if N_subjects > len(subjects):
 
 X=[]
 Y=[]
+FA= []
 
 for sub in range(0,N_subjects):
     print(subjects[sub])
     this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
     this_dti_path = dti_base + subjects[sub] + '/'+bdir+'/dtifit'
     this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
-    this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub)
+    this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
     #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
     #Y[sub]= this_subject.Y
     X.append(this_subject.X)
     Y.append(this_subject.Y)
+    FA.append(this_subject.FA_on_points)
 
 X = torch.cat(X)
 Y = torch.cat(Y)
+FA = torch.cat(FA)
 
-#this could have changed due to available voxels
+FA[FA<0.2]=0
+FA[FA != 0]= 1
+
+print('the shape of FA is ',FA.shape)
+# this could have changed due to available voxels
 # N_subjects = X.shape[0]
 # N_per_sub = Y.shape[1]
 
 # X=X.reshape([N_subjects*N_per_sub,Nc,Nc,Nc,h,w])
 # Y=Y.reshape([N_subjects*N_per_sub,Nc,Nc,Nc,h,w])
 
-print(X.shape)
+# print(X.shape)
 
 ############################## NETWORK ##########################
-filterlist3d= [1,4,4]
+filterlist3d= [1,64,64,64]
 activationlist3d = [F.relu for i in range(0,len(filterlist3d)-1)]
-#activationlist3d[-1]=None
+activationlist3d[-1]=None
 
-gfilterlist2d = [4,4,4,4,4,4,1]
+gfilterlist2d = [64,64,64,64,1]
 gactivationlist2d = [F.relu for i in range(0,len(gfilterlist2d)-1)]
 gactivationlist2d[-1]=None
 
@@ -112,13 +119,13 @@ modelParams={'H':5,
              'batch_size': 1,
              'lr': 1e-3,
              'factor': 0.5,
-             'Nepochs': 10,
+             'Nepochs': 30,
              'patience': 10,
              'Ntrain': X.shape[0],
              'Ntest': 1,
              'Nvalid': 1,
              'interp': 'inverse_distance',
-             'basepath': './data/',
+             'basepath': '/home/u2hussai/scratch/dtitraining/networks/',
              'type': 'V1',
              'misc':'residual5d'
             }
@@ -129,7 +136,9 @@ shp = X.shape
 X = X.view(shp[0:4] + (1,) + shp[-2:])
 Y = Y.view(shp[0:4] + (1,) + shp[-2:])
 
-trnr = training.trainer(modelParams,X,Y-X,1,16,100,core=ico.core_basis,
+
+
+trnr = training.trainer(modelParams,X,Y-X,FA=FA,B=1,Nc=Nc,Ncore=100,core=ico.core_basis,
                         core_inv=ico.core_basis_inv,zeros=ico.zeros,I=ico.I_internal,J=ico.J_internal)
 trnr.makeNetwork()
 trnr.net=trnr.net.cuda()
@@ -139,17 +148,17 @@ trnr.train()
 
 
 
-test = trnr.Xtrain
-#test = test.view((1,)+test.shape)
+# test = trnr.Xtrain
+# #test = test.view((1,)+test.shape)
 
-plt.imshow(test[5,5,0,10,0])
-plt.figure()
-plt.imshow(Y[5,5,0,10,0])
+# plt.imshow(test[5,5,0,10,0])
+# plt.figure()
+# plt.imshow(Y[5,5,0,10,0])
 
-this_test=test[5].view((1,)+test.shape[1:])
-out =this_test+ trnr.net(this_test.cuda())
-plt.figure()
-plt.imshow(out[0,5,5,10,0].detach().numpy())
+# this_test=test[5].view((1,)+test.shape[1:])
+# out =this_test+ trnr.net(this_test.cuda())
+# plt.figure()
+# plt.imshow(out[0,5,5,10,0].detach().numpy())
 # import diffusion
 # import icosahedron
 # import dihedral12 as d12
