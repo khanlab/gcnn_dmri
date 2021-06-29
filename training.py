@@ -34,6 +34,7 @@ def path_from_modelParams(modelParams):
     path = path + '_lr-' + str(modelParams['lr'])
     path = path + '_batch_size-'+ str(modelParams['batch_size'])
     path = path + '_interp-' + str(modelParams['interp'])
+    path = path + '_3dlayers-'+array2str(modelParams['filterlist3d'])
     path = path + '_glayers-'+ array2str(modelParams['gfilterlist'])
     try:
         path = path + '_gactivation0-' + str(modelParams['gactivationlist'][0].__str__()).split()[1]
@@ -61,6 +62,25 @@ def get_accuracy(net,input_val,target_val):
     accuracy = x * target_val
     accuracy = torch.rad2deg( torch.arccos( accuracy.sum(dim=-1).abs()))
     return accuracy.mean().detach().cpu()
+
+class to_icosahedron(Module):
+    """
+    This module moves from N-directions to the 2d icosahedron
+    """
+    def __init__(self,ico_mesh,subject_interp_matrices):
+        #subject_interp_matrices is the subject specific interpolation matrix [sub_id,...]
+        super(to_icosahedron,self).__init__()
+        self.icomesh=ico_mesh
+        self.subject_interp_matrices=subject_interp_matrices
+
+    def forward(self,x,sub_id):
+        #x will have shape [batch,C,Nc,Nc,Nc]
+        B=x.shape[0]
+        C=x.shape[1]
+        N=x.shape[2]
+        x=x.moveaxis(1,-1)
+        x=x.view([-1,C])
+        
 
 
 class in3d(Module):
@@ -238,9 +258,8 @@ class residualnet5d(Module):
 
 
 class trainer:
-    def __init__(self,modelParams,Xtrain=None,Ytrain=None,FA=None,B=None,Nc=None,Ncore=None,core=None,core_inv=None,I=None,\
-                                                                                                            J=None,\
-                                                                                                        zeros=None):
+    def __init__(self,modelParams,Xtrain=None,Ytrain=None,mask=None,Xvalid=None,Yvalid=None,maskvalid=None,
+                 B=None,Nc=None,Ncore=None,core=None,core_inv=None,I=None,J=None,zeros=None):
         """
         Class to create and train networks
         :param modelParams: A dict with all network parameters
@@ -250,6 +269,9 @@ class trainer:
         self.modelParams=modelParams
         self.Xtrain=Xtrain
         self.Ytrain=Ytrain
+        self.Xvalid=Xvalid
+        self.Yvalid=Yvalid
+        self.maskvalid = maskvalid
         self.net=[]
         self.B = B
         self.Nc = Nc
@@ -259,14 +281,14 @@ class trainer:
         self.I = I
         self.J = J
         self.zeros = zeros
-        self.FA = FA
+        self.mask = mask
 
-    def mul_by_FA(inputs,targets,FA):
+    def mul_by_mask(inputs,targets,mask):
         h = inputs.shape[-2]
         w = inputs.shape[-1]
         inputs = inputs.view(-1,h*w)
         targets = targets.view(-1,h*w)
-        FA = FA.view(-1)
+        mask = mask.view(-1)
         inputs= torch 
 
     def makeNetwork(self):
@@ -297,28 +319,41 @@ class trainer:
                                       patience=self.modelParams['patience'],
                                       verbose=True)
         running_loss = 0
-        train = torch.utils.data.TensorDataset(self.Xtrain, self.Ytrain,self.FA)
+        train = torch.utils.data.TensorDataset(self.Xtrain, self.Ytrain,self.mask)
         trainloader = DataLoader(train, batch_size=self.modelParams['batch_size'])
+        
+        running_loss_valid = 0
+        valid = torch.utils.data.TensorDataset(self.Xvalid, self.Yvalid,self.maskvalid)
+        validloader = DataLoader(valid,batch_size=self.modelParams['batch_size'])
 
         epochs_list = []
         loss_list = []
+        loss_valid_list = []
 
         for epoch in range(0, self.modelParams['Nepochs']):
             print(epoch)
-            for n, (inputs, targets,FA) in enumerate(trainloader, 0):
+            for n, (inputs, targets,mask) in enumerate(trainloader, 0):
                 optimizer.zero_grad()
-                torch.cuda.empty_cache()
-                output = self.net(inputs.cuda())
-                output = FA[:,:,:,:,None,None,None].to(output.device.type)*output
-                targets = FA[:,:,:,:,None,None,None].to(targets.device.type)*targets
-                loss = criterion(output, targets.cuda())
-                print(loss.shape)
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    output = self.net(inputs.cuda()).cpu()
+                    output = output[mask==1,:,:,:]
+                    targets = targets[mask==1,:,:,:]
+                    loss = criterion(output.cuda(), targets.cuda())
+                else:
+                    torch.cuda.empty_cache()
+                    output = self.net(inputs)
+                    output = output[mask==1,:,:,:]
+                    targets = targets[mask==1,:,:,:]
+                    loss = criterion(output, targets)
                 loss = loss.sum()
                 print(loss)
                 #print(self.net.gconvs.gconvs.gConvs[-1].conv.weight[0, 0])
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
+
+
             else:
                 print(running_loss / len(trainloader))
                 loss_list.append(running_loss / len(trainloader))
@@ -327,11 +362,25 @@ class trainer:
                 if np.isnan(running_loss / len(trainloader)) == 1:
                     break
 
+                running_loss_valid = 0
+                #compute validation loss
+                for nn, (in_valid, targ_valid, mask_valid) in enumerate(validloader,0):
+                    torch.cuda.empty_cache()
+                    out_valid = self.net(in_valid.cuda()).cpu()
+                    out_valid = out_valid[mask_valid==1,:,:,:]
+                    targ_valid = targ_valid[mask_valid==1,:,:,:]
+                    loss_valid = criterion(out_valid,targ_valid)
+                    running_loss_valid += loss_valid.item()
+                else:
+                    print('Validation loss',running_loss_valid / len(validloader))
+                    loss_valid_list.append(running_loss_valid / len(validloader))
+
             scheduler.step(running_loss)
             running_loss = 0.0
             if (epoch % 1) == 0:
                 fig_err, ax_err = plt.subplots()
                 ax_err.plot(epochs_list, np.log10(loss_list))
+                ax_err.plot(epochs_list, np.log10(loss_valid_list))
                 if lossname is None:
                     lossname = 'loss.png'
                 plt.savefig(lossname)

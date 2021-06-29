@@ -23,18 +23,23 @@ def cuts_and_pad(nii):
         A = torch.nn.functional.pad(A,(0,0,1,1,0,0))
     return nib.Nifti1Image(A.detach().numpy(),nii.affine)
 
-# inpath = sys.argv[1]
-# refpath = sys.argv[2]
+inpath = sys.argv[1]
+refpath =sys.argv[2]
 
-# mask1nii = nib.load(inpath + 'mask1.nii.gz')
-# mask2nii = nib.load(inpath + 'mask2.nii.gz')
-# ref = nib.load(refpath + 'nodif_brain_mask.nii.gz')
+mask1nii = nib.load(inpath + 'mask1.nii.gz')
+mask2nii = nib.load(inpath + 'mask2.nii.gz')
+ref = nib.load(refpath + 'nodif_brain_mask.nii.gz')
 
-# masknii = nib.Nifti1Image( mask1nii.get_fdata() + mask2nii.get_fdata(), mask1nii.affine )
-# masknii = processing.resample_from_to(masknii,ref,order=0)
-# masknii = cuts_and_pad(masknii)
+masknii = nib.Nifti1Image( mask1nii.get_fdata() + mask2nii.get_fdata(), mask1nii.affine )
+masknii = processing.resample_from_to(masknii,ref,order=0)
+masknii = cuts_and_pad(masknii)
 
-# nib.save(masknii,inpath+'mask.nii.gz')
+mask1_cut_padnii = cuts_and_pad(processing.resample_from_to(mask1nii,ref,order=0))
+mask2_cut_padnii = cuts_and_pad(processing.resample_from_to(mask2nii,ref,order=0))
+
+nib.save(masknii,inpath+'mask.nii.gz')
+nib.save(mask1_cut_padnii,inpath+'mask1_cut_pad.nii.gz')
+nib.save(mask2_cut_padnii,inpath+'mask2_cut_pad.nii.gz')
 
 
 #outpath = sys.argv[2]

@@ -40,12 +40,12 @@ import sys
 ##we need to get data from various subjects and stack it
 
 ##params for data grab
-N_subjects =1#sys.argv[1]
+N_subjects =15#sys.argv[1]
 N_per_sub=300
-Nc=32
+Nc=16
 sub_path = '/home/u2hussai/scratch/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
 bdir = str(6) #sys.argv[3] #number of bvec directions
-H=5 #lets keep this small for intial run
+H=6 #lets keep this small for intial run
 h=H+1
 w=5*h
 
@@ -58,55 +58,62 @@ if N_subjects > len(subjects):
     raise ValueError('Number of subjects requested is greater than those available')
 
 #data arrays
-#X = torch.empty([N_subjects,N_per_sub,Nc,Nc,Nc,h,w])
-#Y = torch.empty([N_subjects,N_per_sub,Nc,Nc,Nc,h,w])
-
 X=[]
 Y=[]
-FA= []
+mask_train= []
 
 for sub in range(0,N_subjects):
     print(subjects[sub])
     this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
-    this_dti_path = dti_base + subjects[sub] + '/'+bdir+'/dtifit'
+    this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit'
     this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
     this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
     #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
     #Y[sub]= this_subject.Y
     X.append(this_subject.X)
     Y.append(this_subject.Y)
-    FA.append(this_subject.FA_on_points)
+    mask_train.append(this_subject.mask_train)
 
 X = torch.cat(X)
 Y = torch.cat(Y)
-FA = torch.cat(FA)
+mask_train = torch.cat(mask_train)
 
-FA[FA<0.2]=0
-FA[FA != 0]= 1
+print('the shape of mask is ',mask_train.shape)
 
-print('the shape of FA is ',FA.shape)
-# this could have changed due to available voxels
-# N_subjects = X.shape[0]
-# N_per_sub = Y.shape[1]
+#we need a validation set, say 10 random patches
+X_valid = []
+Y_valid = []
+mask_valid =[]
+N_per_sub=10
+sub=-1 #take the last one
+this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+this_dti_path = dti_base + subjects[sub] + '/'+bdir+'/dtifit'
+this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
+this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
+#X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
+#Y[sub]= this_subject.Y
+X_valid.append(this_subject.X)
+Y_valid.append(this_subject.Y)
+mask_valid.append(this_subject.mask_train)
 
-# X=X.reshape([N_subjects*N_per_sub,Nc,Nc,Nc,h,w])
-# Y=Y.reshape([N_subjects*N_per_sub,Nc,Nc,Nc,h,w])
+X_valid = torch.cat(X_valid)
+Y_valid = torch.cat(Y_valid)
+mask_valid = torch.cat(mask_valid)
 
-# print(X.shape)
 
 ############################## NETWORK ##########################
-filterlist3d= [1,64,64,64]
+filterlist3d=[int(t) for t in sys.argv[1].split(',')] #[1,128,128]
 activationlist3d = [F.relu for i in range(0,len(filterlist3d)-1)]
-activationlist3d[-1]=None
+#activationlist3d[-1]=None
 
-gfilterlist2d = [64,64,64,64,1]
+gfilterlist2d =[int(t) for t in sys.argv[2].split(',')] #[16,16,16,16,1]
 gactivationlist2d = [F.relu for i in range(0,len(gfilterlist2d)-1)]
 gactivationlist2d[-1]=None
 
 
 
 
-modelParams={'H':5,
+modelParams={'H':H,
              'shells':filterlist3d[-1],
              'gfilterlist': gfilterlist2d,
              'linfilterlist': None,
@@ -119,8 +126,8 @@ modelParams={'H':5,
              'batch_size': 1,
              'lr': 1e-3,
              'factor': 0.5,
-             'Nepochs': 30,
-             'patience': 10,
+             'Nepochs': 20,
+             'patience': 3,
              'Ntrain': X.shape[0],
              'Ntest': 1,
              'Nvalid': 1,
@@ -136,9 +143,12 @@ shp = X.shape
 X = X.view(shp[0:4] + (1,) + shp[-2:])
 Y = Y.view(shp[0:4] + (1,) + shp[-2:])
 
+shp = X_valid.shape
+X_valid = X_valid.view(shp[0:4] + (1,) + shp[-2:])
+Y_valid = Y_valid.view(shp[0:4] + (1,) + shp[-2:])
 
 
-trnr = training.trainer(modelParams,X,Y-X,FA=FA,B=1,Nc=Nc,Ncore=100,core=ico.core_basis,
+trnr = training.trainer(modelParams,X,Y-X,mask=mask_train,Xvalid=X_valid,Yvalid=Y_valid-X_valid,maskvalid=mask_valid,B=1,Nc=Nc,Ncore=100,core=ico.core_basis,
                         core_inv=ico.core_basis_inv,zeros=ico.zeros,I=ico.I_internal,J=ico.J_internal)
 trnr.makeNetwork()
 trnr.net=trnr.net.cuda()

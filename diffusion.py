@@ -10,6 +10,7 @@ from scipy.spatial import KDTree
 import nibabel as nib
 import dipy
 import os
+from cutnifti import cuts_and_pad
 
 class dti():
     """
@@ -199,11 +200,11 @@ class diffVolume():
             x = self.bvecs_sorted[shell][:, 0]
             y = self.bvecs_sorted[shell][:, 1]
             z = self.bvecs_sorted[shell][:, 2]
-            lons, lats = xyz2lonlat(x,y,z)
+            plons, plats = xyz2lonlat(x,y,z)
 
-            #nlons, nlats = xyz2lonlat(-x,-y,-z)
-            #lons = np.concatenate((plons,nlons),0)
-            #lats = np.concatenate((plats, nlats), 0)
+            nlons, nlats = xyz2lonlat(-x,-y,-z)
+            lons = np.concatenate((plons,nlons),0)
+            lats = np.concatenate((plats, nlats), 0)
             self.bvec_meshes.append(sTriangulation(lons,lats,tree=True))
 
     def makeInverseDistInterpMatrix(self,ico_mesh):
@@ -267,9 +268,12 @@ class diffVolume():
             if sid==0:
                 S0=data[:,self.inds[sid]]
                 continue
-            out_each_shell.append(np.matmul(self.interpolation_matrices[sid-1],data[:,self.inds[sid]].T).T)
-
-        #do the antipodal averaging
+            #out_each_shell.append(np.matmul(self.interpolation_matrices[sid-1],data[:,self.inds[sid]].T).T)
+            out_each_shell.append(np.matmul(self.interpolation_matrices[sid-1],np.concatenate([data[:,
+                                                                                               self.inds[sid]],
+                                                                                               data[:,
+                                                                                               self.inds[sid]]],-1).T).T)
+        #do the antipodal averaging (this is after interpolation)
         for sid in range(0,n_shells-1):
             out_each_shell[sid]= 0.5*(out_each_shell[sid] + out_each_shell[sid][:,ico_mesh.antipodals])
 
@@ -415,7 +419,7 @@ class diffVolume():
 
         return flat
 
-    def downSample(self, basepath,subjectid):
+    def downSample(self, basepath,subjectid,cut_pad = True):
         """
         Creates 10 volumes with bvec directions ranging from 6-90 of the first shell
         :param path: path to save all the volumes
@@ -447,11 +451,18 @@ class diffVolume():
             S0_mean=S0_mean.mean(-1)
             if not os.path.exists(path):
                 os.makedirs(path)
-            diffout=nib.Nifti1Image(diffout,self.vol.affine)
-            nib.save(diffout,path + "/data.nii.gz")
-            nib.save(self.mask , path+ "/nodif_brain_mask.nii.gz")
+            
             S0_mean=nib.Nifti1Image(S0_mean, self.vol.affine)
-            nib.save(S0_mean,path+'/S0mean.nii.gz')
+            diffout=nib.Nifti1Image(diffout,self.vol.affine)
+            
+            if cut_pad:
+                nib.save(cuts_and_pad(diffout),path + "/data.nii.gz")
+                nib.save(cuts_and_pad(self.mask) , path+ "/nodif_brain_mask.nii.gz")
+                nib.save(cuts_and_pad(S0_mean),path+'/S0mean.nii.gz')
+            else:
+                nib.save(cuts_and_pad(diffout),path + "/data.nii.gz")
+                nib.save(cuts_and_pad(self.mask) , path+ "/nodif_brain_mask.nii.gz")
+                nib.save(cuts_and_pad(S0_mean),path+'/S0mean.nii.gz')
 
             fbval = open(path + '/bvals', "w")
             for i in range(0,bval_inds[c]):

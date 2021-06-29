@@ -117,82 +117,30 @@ class gNetFromList(Module):
     """
     This class will give us a gConv network from a list of filters
     """
-    def __init__(self,H,filterlist,shells,activationlist=None,multigpu=False):
+    def __init__(self,H,filterlist,shells,activationlist=None):
         super(gNetFromList, self).__init__()
-        self.multigpu = multigpu
-
+        
         print("Length of activation list is", len(activationlist))
         if activationlist is None: #if activation list is None turn it into list of nones to avoid error below
                 activationlist=[None for i in range(0,len(filterlist)-1)]
-
-        if ((multigpu) & (len(activationlist)>2)): #we want to shard this network over two gpu
-            print("Using 2 gpus in gNetFromList")
-            N_layers = len(filterlist)
-            N_half = int(N_layers/2)
-        
-            filterlist_1 = filterlist[0:N_half]
-            filterlist_2 = filterlist[N_half:]
+     
+        self.gConvs=[]
+        self.gNorms=[]
             
-            filterlist_2.insert(0,filterlist_1[-1])  #since the first element in the filter list is the dimension of the input, we need to insert that here
-            
-            N_1 = len(filterlist_1)
-            N_2 = len(filterlist_2)
-
-            activationlist_1 = activationlist[0:N_1-1]
-            activationlist_2 = activationlist[N_1-1:]
-
-            self.gConvs1 = []
-            self.gConvs2 = []
-
-            for i in range(0,len(filterlist_1)-1): #first gpu
-                if i==0:
-                    self.gConvs1 = [gConv_gNorm(filterlist_1[i], filterlist_1[i+1], H, shells=shells,activation=activationlist_1[i])]  # this is the initilization 
-                else:
-                    norm = True
-                    if (i==len(filterlist_1)-2):
-                        norm =False
-                    self.gConvs1.append(gConv_gNorm(filterlist_1[i], filterlist_1[i+1], H, shells=0,
-                                                    activation=activationlist_1[i],norm=norm))
-                self.gConvs1 = ModuleList(self.gConvs1).cuda(0)
-
-            for i in range(0,len(filterlist_2)-1): #second gpu
-                if i==0:                                                           #notice shells=0
-                    self.gConvs2 = [gConv_gNorm(filterlist_2[i], filterlist_2[i+1], H, shells=0,activation=activationlist_2[i])]  # this is the initilization 
-                else:
-                    norm = True
-                    if (i == len(filterlist_2) - 2):
-                        norm = False
-                    self.gConvs2.append(gConv_gNorm(filterlist_2[i], filterlist_2[i+1], H, shells=0,
-                                                    activation=activationlist_2[i],norm=norm))
-                self.gConvs2 = ModuleList(self.gConvs2).cuda(1)
-
-        else:
-            self.gConvs=[]
-            self.gNorms=[]
-            
-            for i in range(0,len(filterlist)-1):
-                if i ==0:
-                    self.gConvs = [gConv_gNorm(filterlist[i], filterlist[i+1], H, shells=shells,activation=activationlist[i])]  # this is the initilization
-                else:
-                    norm = True
-                    if (i == len(filterlist) - 2):
-                        norm = False
-                    self.gConvs.append(gConv_gNorm(filterlist[i],filterlist[i+1],H,shells=0,
-                                                   activation=activationlist[i],norm=norm))
-            self.gConvs=ModuleList(self.gConvs)
+        for i in range(0,len(filterlist)-1):
+            if i ==0:
+                self.gConvs = [gConv_gNorm(filterlist[i], filterlist[i+1], H, shells=shells,activation=activationlist[i])]  # this is the initilization
+            else:
+                norm = True
+                if (i == len(filterlist) - 2):
+                    norm = False
+                self.gConvs.append(gConv_gNorm(filterlist[i],filterlist[i+1],H,shells=0,
+                                                activation=activationlist[i],norm=norm))
+        self.gConvs=ModuleList(self.gConvs)
 
     def forward(self,x):
-        if self.multigpu:
-            x = x.cuda(0)
-            for gConv in self.gConvs1:
-                x = gConv(x)
-            x = x.cuda(1)
-            for gConv in self.gConvs2:
-                x = gConv(x)
-
-        else:
-            for gConv in self.gConvs:
-                x=gConv(x)
+        for gConv in self.gConvs:
+            x=gConv(x)
             
         return x
 

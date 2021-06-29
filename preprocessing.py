@@ -49,7 +49,9 @@ class training_data:
         self.y = self.y.reshape((-1,)+tuple(self.y.shape[-3:]))
         self.z = self.z.reshape((-1,)+tuple(self.z.shape[-3:]))
 
-        mask = torch.from_numpy(self.dti.mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        #mask = torch.from_numpy(self.dti.mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        mask = nib.load(self.inputpath+'/mask.nii.gz')
+        mask = torch.from_numpy(mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
         FA = torch.from_numpy(self.dti.FA.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
         #flatten patch labels (indices for each patch) and patch indices (indices for voxels in patch)
         mask = mask.reshape((-1,)+ tuple(mask.shape[-3:])) #flatten patch labels
@@ -65,7 +67,7 @@ class training_data:
         N=N_train
 
         ##get coordinates for data extraction
-        occ_inds = np.where(((self.mask>0.1) & (self.FA>0.0)))[0] #extract patches based on mean FA
+        occ_inds = np.where(((self.mask>0.00) & (self.FA>0.0)))[0] #extract patches based on mean FA
         #occ_inds = np.where(self.mask>0.3)[0] #extract patches based on mean FA
         print('Max patches available are ', len(occ_inds))
         #occ_inds = np.where(self.mask>0.5)[0]
@@ -94,11 +96,13 @@ class training_data:
         voxels=np.asarray([xp,yp,zp]).T #putting them in one array
         #inputs
         self.FA_on_points = self.dti.FA.get_fdata()[self.xp,self.yp,self.zp]
+        self.mask_train = nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
         S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
         X = X[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
         shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
         self.FA_on_points = torch.from_numpy(self.FA_on_points).reshape(xpp.shape)
+        self.mask_train = torch.from_numpy(self.mask_train).reshape(xpp.shape)
         X = X.reshape(shp)
         #output (labels)
         Y=self.dti.icoSignalFromDti(self.ico)

@@ -118,14 +118,14 @@ class predicting_data:
             shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
             X = X.reshape(shp)
             #standardize inputs
-            # self.Xmean = X.mean()
-            # self.Xstd = X.std()
-            # X = (X - self.Xmean)/self.Xstd
-            # X = torch.from_numpy(X).contiguous().float()
-            self.Xmax = np.nanmax(X)
-            self.Xmin = np.nanmin(X)
-            X = (X - np.nanmin(X)) / (np.nanmax(X) - np.nanmin(X))
+            self.Xmean = X.mean()
+            self.Xstd = X.std()
+            X = (X - self.Xmean)/self.Xstd
             X = torch.from_numpy(X).contiguous().float()
+            # self.Xmax = np.nanmax(X)
+            # self.Xmin = np.nanmin(X)
+            # X = (X - np.nanmin(X)) / (np.nanmax(X) - np.nanmin(X))
+            # X = torch.from_numpy(X).contiguous().float()
 
             shp = X.shape
             X = X.view(shp[0:4] + (1,) + shp[-2:])
@@ -182,16 +182,16 @@ class residual5dPredictor:
         w = 5*h
         pred = torch.zeros_like(self.pred_data.X)
         batch_size=1
-        #device = self.net.device.type
+        device = list(self.net.parameters())[0].device.type
         for i in range(0,self.pred_data.X.shape[0],batch_size):
             print(i)
-            pred[i:i+batch_size]=(self.net(self.pred_data.X[i:i+batch_size].cuda() ).cpu() + self.pred_data.X[i:i+batch_size]).detach()
+            pred[i:i+batch_size]=(self.net(self.pred_data.X[i:i+batch_size].to(device) ).cpu() + self.pred_data.X[i:i+batch_size]).detach()
 
         out = np.zeros((self.pred_data.diff_input.vol.shape[0:3] + (h,w)))
         oldshp = pred.shape
         pred = pred.view(-1,h,w)
-        #pred = pred*self.pred_data.Xstd + self.pred_data.Xmean
-        pred = pred * (self.pred_data.Xmax - self.pred_data.Xmin) + self.pred_data.Xmin
+        pred = pred*self.pred_data.Xstd + self.pred_data.Xmean
+        #pred = pred * (self.pred_data.Xmax - self.pred_data.Xmin) + self.pred_data.Xmin
 
         out[self.pred_data.xp,self.pred_data.yp,self.pred_data.zp] = pred
 
