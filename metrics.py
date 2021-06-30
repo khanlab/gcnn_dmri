@@ -35,25 +35,25 @@ subjects = os.listdir(sub_path)
 bdirs = os.listdir(sub_path + subjects[0] +'/')
 #compute angle difference for all angles
 diff_directions=[]
-for bdir in bdirs:
-    mean_sub = []
-    for sub in subjects:
-        mask_nii = nib.load(sub_path + sub + '/' + '6' + '/mask.nii.gz' )
-        V1_nii = nib.load(sub_path + sub + '/'+ bdir + '/dtifit_V1.nii.gz')
-        V1_gt_nii = nib.load(sub_path + sub + '/'+ '90' + '/dtifit_V1.nii.gz')
-        out = save_dot(V1_nii,V1_gt_nii)
-        out = out.get_fdata()
-        mask = mask_nii.get_fdata()
-        out = out[mask==1]
-        mean_sub.append(np.nanmean(out))
-    diff_directions.append(np.mean(mean_sub))
+# for bdir in bdirs:
+#     mean_sub = []
+#     for sub in subjects:
+#         mask_nii = nib.load(sub_path + sub + '/' + '6' + '/mask1_cut_pad.nii.gz' )
+#         V1_nii = nib.load(sub_path + sub + '/'+ bdir + '/dtifit_V1.nii.gz')
+#         V1_gt_nii = nib.load(sub_path + sub + '/'+ '90' + '/dtifit_V1.nii.gz')
+#         out = save_dot(V1_nii,V1_gt_nii)
+#         out = out.get_fdata()
+#         mask = mask_nii.get_fdata()
+#         out = out[mask==1]
+#         mean_sub.append(np.nanmean(out))
+#     diff_directions.append(np.mean(mean_sub))
 
 
 mean_net_v1=[]
 mean_dti6_v1=[]
 for sub in subjects:
 
-    mask = nib.load(sub_path + sub + '/6/mask.nii.gz').get_fdata()
+    mask = nib.load(sub_path + sub + '/6/mask2_cut_pad.nii.gz').get_fdata()
 
     V1_6_nii = nib.load(sub_path + sub +'/6/dtifit_V1.nii.gz')
     V1_net_nii = nib.load(sub_path + sub +'/6/dtifit_network_V1.nii.gz')

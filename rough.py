@@ -40,12 +40,12 @@ import sys
 ##we need to get data from various subjects and stack it
 
 ##params for data grab
-N_subjects =15#sys.argv[1]
-N_per_sub=300
+N_subjects =1#sys.argv[1]
+N_per_sub=100
 Nc=16
 sub_path = '/home/u2hussai/scratch/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
 bdir = str(6) #sys.argv[3] #number of bvec directions
-H=6 #lets keep this small for intial run
+H=5 #lets keep this small for intial run
 h=H+1
 w=5*h
 
@@ -65,9 +65,10 @@ mask_train= []
 for sub in range(0,N_subjects):
     print(subjects[sub])
     this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+    this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit'
     this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit'
     this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
-    this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
+    this_subject=training_data(this_path,this_dti_in_path, this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
     #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
     #Y[sub]= this_subject.Y
     X.append(this_subject.X)
@@ -89,7 +90,7 @@ sub=-1 #take the last one
 this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
 this_dti_path = dti_base + subjects[sub] + '/'+bdir+'/dtifit'
 this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
-this_subject=training_data(this_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
+this_subject=training_data(this_path,this_dti_path,this_dti_path,this_dti_mask_path,H,N_per_sub,Nc=Nc)
 #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
 #Y[sub]= this_subject.Y
 X_valid.append(this_subject.X)
@@ -124,7 +125,7 @@ modelParams={'H':H,
              'loss': nn.MSELoss(),
              'bvec_dirs': int(bdir),
              'batch_size': 1,
-             'lr': 1e-3,
+             'lr': 1e-4,
              'factor': 0.5,
              'Nepochs': 20,
              'patience': 3,

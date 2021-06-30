@@ -7,13 +7,15 @@ import numpy as np
 
 
 class training_data:
-    def __init__(self,inputpath,dtipath, maskpath, H, N_train, Nc=16):
+    def __init__(self,inputpath,dtipath_in,dtipath, maskpath, H, N_train, Nc=16):
         self.inputpath = inputpath
         self.dtipath = dtipath 
+        self.dtipath_in = dtipath_in
         self.maskpath = maskpath
 
         self.diff_input = diffusion.diffVolume(inputpath)
         self.dti=diffusion.dti(self.dtipath,self.maskpath)
+        self.dti_in=diffusion.dti(self.dtipath_in,self.maskpath)
 
         self.in_shp = self.diff_input.vol.shape
         self.N_patch= Nc #this is multiple of 144 and 176 (so have to pad HCP diffusion)
@@ -98,12 +100,25 @@ class training_data:
         self.FA_on_points = self.dti.FA.get_fdata()[self.xp,self.yp,self.zp]
         self.mask_train = nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
-        S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
-        X = X[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        
         shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
         self.FA_on_points = torch.from_numpy(self.FA_on_points).reshape(xpp.shape)
         self.mask_train = torch.from_numpy(self.mask_train).reshape(xpp.shape)
+        
+        #S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
+        
+        
+        # S0X, X = self.diff_input.makeFlat(voxels,self.ico) #interpolate
+        # X = X[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        # X = X.reshape(shp)
+
+
+        X = self.dti_in.icoSignalFromDti(self.ico)
+        X = X[:,:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        X = X[xp,yp,zp]
         X = X.reshape(shp)
+        
+
         #output (labels)
         Y=self.dti.icoSignalFromDti(self.ico)
         Y = Y[:,:,:,I[0,:,:],J[0,:,:]]
