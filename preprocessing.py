@@ -7,15 +7,22 @@ import numpy as np
 
 
 class training_data:
-    def __init__(self,inputpath,dtipath_in,dtipath, maskpath, H, N_train, Nc=16):
+    def __init__(self,inputpath,dtipath_in,dtipath, maskpath, tpath, H, N_train=None, Nc=16):
         self.inputpath = inputpath
         self.dtipath = dtipath 
         self.dtipath_in = dtipath_in
         self.maskpath = maskpath
+        self.tpath = tpath
 
         self.diff_input = diffusion.diffVolume(inputpath)
         self.dti=diffusion.dti(self.dtipath,self.maskpath)
         self.dti_in=diffusion.dti(self.dtipath_in,self.maskpath)
+
+        self.t1 = nib.load(tpath + '/T1_cut_pad.nii.gz')
+        self.t2 = nib.load(tpath + '/T2_cut_pad.nii.gz')
+
+
+        self.interp_matrix = []
 
         self.in_shp = self.diff_input.vol.shape
         self.N_patch= Nc #this is multiple of 144 and 176 (so have to pad HCP diffusion)
@@ -73,11 +80,16 @@ class training_data:
         #occ_inds = np.where(self.mask>0.3)[0] #extract patches based on mean FA
         print('Max patches available are ', len(occ_inds))
         #occ_inds = np.where(self.mask>0.5)[0]
-        if N >= len(occ_inds):
-            #raise ValueError('requested patches exceed those availale.')
-            print('requested patches exceed those availale')
-            N = len(occ_inds)
-        oi=np.random.randint(0,len(occ_inds),N) #get random patches
+        print('N is:', N_train)
+        if N is not None:
+            if (N >= len(occ_inds)):
+                #raise ValueError('requested patches exceed those availale.')
+                print('requested patches exceed those availale')
+                N = len(occ_inds)
+        if N_train is None:
+            oi=np.arange(0,len(occ_inds))
+        else:
+            oi=np.random.randint(0,len(occ_inds),N) #get random patches
         print('using %d patches' % len(oi))
         xpp=self.x[occ_inds[oi]] #extract coordinates
         ypp=self.y[occ_inds[oi]]
@@ -101,7 +113,7 @@ class training_data:
         self.mask_train = nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
         
-        shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
+        #shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
         self.FA_on_points = torch.from_numpy(self.FA_on_points).reshape(xpp.shape)
         self.mask_train = torch.from_numpy(self.mask_train).reshape(xpp.shape)
         
@@ -113,18 +125,64 @@ class training_data:
         # X = X.reshape(shp)
 
 
-        X = self.dti_in.icoSignalFromDti(self.ico)
-        X = X[:,:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
-        X = X[xp,yp,zp]
+        #X = self.dti_in.icoSignalFromDti(self.ico)
+        #X = X[:,:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        shp = tuple(xpp.shape) + (self.diff_input.vol.shape[-1],)  # we are putting this in the shape of list [
+                                                                 # patch_label_list,Nc,Nc,Nc,Ndir]
+
+        #T1 and T2 stuff
+        self.XT1 = self.t1.get_fdata()[xp, yp, zp].reshape(xpp.shape)
+        self.XT2 = self.t2.get_fdata()[xp, yp, zp].reshape(xpp.shape)
+
+        self.XT1 = (self.XT1 - self.XT1.mean()) / self.XT1.std()
+        self.XT2 = (self.XT2 - self.XT2.mean()) / self.XT2.std()
+
+        self.XT1 = torch.from_numpy(self.XT1).contiguous().float()
+        self.XT2 = torch.from_numpy(self.XT2).contiguous().float()
+
+        self.XT1 = self.XT1.view(self.XT1.shape + (1,))
+        self.XT2 = self.XT2.view(self.XT2.shape + (1,))
+
+
+        X = self.diff_input.vol.get_fdata()[xp,yp,zp,:]
+        #X = X[xp,yp,zp]
         X = X.reshape(shp)
-        
+
+
+        S0X, Xflat = self.diff_input.makeFlat(voxels,self.ico) #interpolate
+        Xflat = Xflat[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        shp = tuple(xpp.shape) + (h, w)
+        Xflat = Xflat.reshape(shp)
+        S0X = S0X.reshape(xpp.shape)
+
+        #we want also Xflat_dti
+        Xflat_dti = self.dti_in.icoSignalFromDti(self.ico)
+        Xflat_dti = Xflat_dti/self.dti.S0[:,:,:,None,None]
+        Xflat_dti = Xflat_dti[:,:,:,I[0,:,:],J[0,:,:]]
+        Xflat_dti = Xflat_dti[xp,yp,zp]
+        Xflat_dti = Xflat_dti.reshape(tuple(xpp.shape) + (h,w))
 
         #output (labels)
-        Y=self.dti.icoSignalFromDti(self.ico)
+        shp = tuple(xpp.shape) + (h, w)  # we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
+        Y=self.dti.icoSignalFromDti(self.ico)/self.dti.S0[:,:,:,None,None]
         Y = Y[:,:,:,I[0,:,:],J[0,:,:]]
-        Y=Y[xp,yp,zp]
-        Y=Y.reshape(shp) #same shape for outputs
+        Y = Y[xp,yp,zp]
+        Y = Y.reshape(shp) #same shape for outputs
+        S0Y = self.dti.S0.get_fdata()[xp,yp,zp]
+        S0Y = S0Y.reshape(xpp.shape)
+
+        S0Y = (S0Y - S0Y.mean())/S0Y.std()
+        S0Y = torch.from_numpy(S0Y).contiguous().float()
+
         #standardize both
+        #save mean for predictions
+        self.Xmean = X.mean()
+        self.Xstd = X.std()
+        self.S0Xmean = S0X.mean()
+        self.S0Xstd = S0X.std()
+        self.Xflatmean =Xflat.mean()
+        self.Xflatstd = Xflat.std()
+
         X = (X - X.mean())/X.std()
         X = torch.from_numpy(X).contiguous().float()
         Y = (Y - Y.mean())/Y.std()
@@ -136,9 +194,13 @@ class training_data:
         # Y = (Y - np.nanmin(Y))/(np.nanmax(Y)-np.nanmin(Y))
         # Y = torch.from_numpy(Y).contiguous().float()
 
+        self.Xflat =torch.from_numpy( (Xflat - Xflat.mean())/Xflat.std()).contiguous().float()
+        self.S0X = torch.from_numpy((S0X - S0X.mean())/S0X.std()).contiguous().float()
+        self.Xflat_dti =torch.from_numpy( (Xflat_dti - Xflat_dti.mean())/Xflat_dti.std()).contiguous().float()
 
-        self.X = X
-        self.Y = Y
+        self.X = torch.cat([self.XT1,self.XT2,X],dim=-1)
+        self.X = self.X.moveaxis(-1,1)
+        self.Y = [S0Y,Y]
 
 
 
@@ -170,6 +232,7 @@ def makeFlat(diffpath,outpath,H):
     print('saving')
     S0_flat = np.zeros((diff.mask.get_fdata().shape[0:3] + (S0.shape[-1],)))
     S0_flat[i, j, k] = S0
+    #S0_flat = S0_flat[:, :, :,0]
 
     diff_flat = np.zeros((diff.mask.get_fdata().shape[0:3] + out.shape[1:]))
     diff_flat[i, j, k, :, :, :] = out

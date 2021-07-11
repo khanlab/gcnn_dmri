@@ -10,6 +10,47 @@ from dipy.core.sphere import (sphere2cart, cart2sphere)
 from dihedral12 import xy2ind
 from dihedral12 import padding_basis
 
+
+
+def sphere_to_flat_basis( ico_mesh):
+    H = ico_mesh.m + 1
+    w = 5 * (H + 1)
+    h = H + 1
+    basis = np.empty([h, w])
+    basis[:] = np.nan
+    top_faces = [[1, 2], [5, 6], [9, 10], [13, 14], [17, 18]]
+    for c in range(0, 5):
+        face = top_faces[c]
+        for top_bottom in face:
+            # signal_inds are the inds that are needed from vector to matrix
+            signal_inds = np.asarray(ico_mesh.interpolation_inds[top_bottom]).astype(int)
+            # signal = ico_signal[signal_inds]
+            i = ico_mesh.i_list[top_bottom]
+            j = ico_mesh.j_list[top_bottom]
+            i = np.asarray(i).astype(int)
+            j = np.asarray(c * h + j + 1).astype(int)
+            basis[i, j] = signal_inds
+
+    # for padding
+    strip_xy = np.arange(0, H - 1)
+    for c in range(0, 5):  # for padding
+        basis[0, c * h + 1] = 0  # northpole
+
+        c_left = c
+        x_left = -1
+        y_left = strip_xy
+        i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+
+        c_right = (c - 1) % 5
+        x_right = H - 2 - strip_xy
+        y_right = H - 2
+        i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+
+        basis[i_left, j_left] = basis[i_right, j_right]
+
+    return basis
+
+
 class icomesh:
     """
     Class to handle all things icosahedron
