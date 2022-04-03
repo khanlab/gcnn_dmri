@@ -76,10 +76,11 @@ import sys
 ##we need to get data from various subjects and stack it
 
 ##params for data grab
-N_subjects =16#sys.argv[1]
+N_subjects =int(sys.argv[1])
 N_per_sub=500
 Nc=16
-sub_path = '/home/u2hussai/scratch/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
+#sub_path = '/home/u2hussai/scratch/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
+sub_path = '/home/u2hussai/project/u2hussai/scratch_14Sept21/dtitraining/downsample_cut_pad/' #sys.argv[2] #path for input subjects
 #sub_path = './data/downsample_cut_pad/' #sys.argv[2] #path for input subjects
 bdir = str(6) #sys.argv[3] #number of bvec directions
 H=5 #lets keep this small for intial run
@@ -106,11 +107,11 @@ interp_matrix_ind = []
 
 for sub in range(0,N_subjects):
     print(subjects[sub])
-    this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+    this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/diffusion/'
+    this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit/dtifit'
+    this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit/dtifit'
+    this_dti_mask_path =sub_path + '/' + subjects[sub] + '/' + bdir + '/diffusion/nodif_brain_mask.nii.gz'
     this_tpath = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
-    this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit'
-    this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit'
-    this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
     this_subject=training_data(this_path,this_dti_in_path, this_dti_path,this_dti_mask_path,this_tpath, H,N_per_sub,
                                Nc=Nc)
     #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
@@ -140,6 +141,7 @@ S0X = torch.cat(S0X)
 
 
 #validation
+print('loading validaton data')
 X_valid=[]
 Y_valid=[]
 S0Y_valid=[]
@@ -148,15 +150,20 @@ S0X_valid=[]
 mask_valid= []
 interp_matrix_valid = []
 interp_matrix_ind_valid = []
-N_per_sub_v=40
+N_per_sub_v=4
 
-sub=-1
+sub=0
 print(subjects[sub])
-this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+# this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+# this_tpath = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
+# this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit'
+# this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit'
+# this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
+this_path = sub_path + '/' + subjects[sub] + '/' + bdir + '/diffusion/'
 this_tpath = sub_path + '/' + subjects[sub] + '/' + bdir + '/'
-this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit'
-this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit'
-this_dti_mask_path = this_path + '/nodif_brain_mask.nii.gz'
+this_dti_in_path = dti_base + subjects[sub] + '/' + bdir + '/dtifit/dtifit'
+this_dti_path = dti_base + subjects[sub] + '/'+str(90)+'/dtifit/dtifit'
+this_dti_mask_path =sub_path + '/' + subjects[sub] + '/' + bdir + '/masks/mask.nii.gz'
 this_subject=training_data(this_path,this_dti_in_path, this_dti_path,this_dti_mask_path,this_tpath, H,N_per_sub_v,
                             Nc=Nc)
 #X[sub]= this_subject.X #X and Y are already standarized on a per subject basis
@@ -195,12 +202,13 @@ Cinp = 64
 Cin = Cinp*(Nscalars + Nshells*Ndirs)
 
 #filterlist3d=[int(t) for t in sys.argv[1].split(',')] #[1,128,128]
-filterlist3d=[9,64,64,64,Nscalars + Nshells*Ndirs] #[1,128,128]
+#filterlist3d=[9,64,64,64,Nscalars + Nshells*Ndirs] #[1,128,128]
+filterlist3d=[9,Cin,Cin,Cin] #[1,128,128]#filterlist3d=[9,64,64,64,Nscalars + Nshells*Ndirs] #[1,128,128]
 activationlist3d = [F.relu for i in range(0,len(filterlist3d)-1)]
 #activationlist3d[-1]=None
 
 #gfilterlist2d =[int(t) for t in sys.argv[2].split(',')] #[16,16,16,16,1]
-gfilterlist2d =[1,Cinp,Cinp,Cinp,1] #[16,16,16,16,1]
+gfilterlist2d =[Cinp,Cinp,Cinp,Cinp,1] #[16,16,16,16,1]
 gactivationlist2d = [F.relu for i in range(0,len(gfilterlist2d)-1)]
 gactivationlist2d[-1]=None
 
@@ -227,7 +235,7 @@ modelParams={'H':H,
              'Nvalid': 1,
              'interp': 'inverse_distance',
              'basepath': '/home/u2hussai/scratch/dtitraining/networks/',
-             'type': 'V1',
+             'type': 'V1-InternalPaddingON_reflectionfix_cornersNotZero',
              'misc':'residual5dscalar'
             }
 

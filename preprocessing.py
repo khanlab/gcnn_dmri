@@ -9,8 +9,8 @@ import numpy as np
 class training_data:
     def __init__(self,inputpath,dtipath_in,dtipath, maskpath, tpath, H, N_train=None, Nc=16):
         self.inputpath = inputpath
-        self.dtipath = dtipath 
         self.dtipath_in = dtipath_in
+        self.dtipath = dtipath 
         self.maskpath = maskpath
         self.tpath = tpath
 
@@ -59,8 +59,16 @@ class training_data:
         self.z = self.z.reshape((-1,)+tuple(self.z.shape[-3:]))
 
         #mask = torch.from_numpy(self.dti.mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
-        mask = nib.load(self.inputpath+'/mask.nii.gz')
-        mask = torch.from_numpy(mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+        #mask = nib.load(self.inputpath+'/mask.nii.gz')
+
+        mask1=nib.load(self.maskpath).get_fdata()
+        mask2=nib.load(self.tpath + '/masks/mask.nii.gz').get_fdata()
+        mask=np.zeros_like(mask1)
+        mask[ (mask1==1) & (mask2==1) ]=1
+        mask = torch.from_numpy(mask).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
+
+        #mask = nib.load(self.maskpath)#+'/mask.nii.gz')
+        #mask = torch.from_numpy(mask.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
         FA = torch.from_numpy(self.dti.FA.get_fdata()).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
         #flatten patch labels (indices for each patch) and patch indices (indices for voxels in patch)
         mask = mask.reshape((-1,)+ tuple(mask.shape[-3:])) #flatten patch labels
@@ -110,7 +118,12 @@ class training_data:
         voxels=np.asarray([xp,yp,zp]).T #putting them in one array
         #inputs
         self.FA_on_points = self.dti.FA.get_fdata()[self.xp,self.yp,self.zp]
-        self.mask_train = nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
+        #self.mask_train = nib.load(self.maskpath).get_fdata()[self.xp,self.yp,self.zp]#nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
+        mask1=nib.load(self.maskpath).get_fdata()
+        mask2=nib.load(self.tpath + '/masks/mask.nii.gz').get_fdata()
+        self.mask_train=np.zeros_like(mask1)
+        self.mask_train[ (mask1==1) & (mask2==1) ]=1
+        self.mask_train = self.mask_train[self.xp,self.yp,self.zp] #this is the freesurfer mask
         self.diff_input.makeInverseDistInterpMatrix(self.ico.interpolation_mesh) #interpolation initiation
         
         #shp=tuple(xpp.shape) + (h,w) #we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
@@ -134,6 +147,13 @@ class training_data:
         self.XT1 = self.t1.get_fdata()[xp, yp, zp].reshape(xpp.shape)
         self.XT2 = self.t2.get_fdata()[xp, yp, zp].reshape(xpp.shape)
 
+        self.XT1[np.isnan(self.XT1)]=0
+        self.XT2[np.isnan(self.XT2)]=0
+
+        self.XT1[np.isinf(self.XT1)]=0
+        self.XT2[np.isinf(self.XT2)]=0
+
+
         self.XT1 = (self.XT1 - self.XT1.mean()) / self.XT1.std()
         self.XT2 = (self.XT2 - self.XT2.mean()) / self.XT2.std()
 
@@ -151,25 +171,41 @@ class training_data:
 
         S0X, Xflat = self.diff_input.makeFlat(voxels,self.ico) #interpolate
         Xflat = Xflat[:,:,I[0,:,:],J[0,:,:]] #pad (this is input data)
+        #Xflat[:,:,self.ico.corners_in_grid==1]=0
         shp = tuple(xpp.shape) + (h, w)
         Xflat = Xflat.reshape(shp)
         S0X = S0X.reshape(xpp.shape)
 
+        S0X[np.isnan(S0X)]=0
+        X[np.isnan(X)]=0
+        Xflat[np.isnan(Xflat)]=0
+        S0X[np.isinf(S0X)]=0
+        X[np.isinf(X)]=0
+        Xflat[np.isinf(Xflat)]=0
+
         #we want also Xflat_dti
-        Xflat_dti = self.dti_in.icoSignalFromDti(self.ico)
-        Xflat_dti = Xflat_dti/self.dti.S0[:,:,:,None,None]
-        Xflat_dti = Xflat_dti[:,:,:,I[0,:,:],J[0,:,:]]
-        Xflat_dti = Xflat_dti[xp,yp,zp]
-        Xflat_dti = Xflat_dti.reshape(tuple(xpp.shape) + (h,w))
+        Xflat_dti=None
+        #Xflat_dti = self.dti_in.icoSignalFromDti(self.ico)
+        #Xflat_dti = Xflat_dti/self.dti.S0[:,:,:,None,None]
+        #Xflat_dti = Xflat_dti[:,:,:,I[0,:,:],J[0,:,:]]
+        #Xflat_dti = Xflat_dti[xp,yp,zp]
+        #Xflat_dti = Xflat_dti.reshape(tuple(xpp.shape) + (h,w))
 
         #output (labels)
         shp = tuple(xpp.shape) + (h, w)  # we are putting this in the shape of list [patch_label_list,Nc,Nc,Nc,h,w]
-        Y=self.dti.icoSignalFromDti(self.ico)/self.dti.S0[:,:,:,None,None]
+        Y=self.dti.icoSignalFromDti(self.ico)#/self.dti.S0[:,:,:,None,None]
         Y = Y[:,:,:,I[0,:,:],J[0,:,:]]
+        #Y[:,:,:,self.ico.corners_in_grid==1]=0
         Y = Y[xp,yp,zp]
         Y = Y.reshape(shp) #same shape for outputs
         S0Y = self.dti.S0.get_fdata()[xp,yp,zp]
         S0Y = S0Y.reshape(xpp.shape)
+
+        S0Y[np.isnan(S0Y)]=0
+        Y[np.isnan(Y)]=0
+        S0Y[np.isinf(S0Y)]=0
+        Y[np.isinf(Y)]=0
+        
 
         S0Y = (S0Y - S0Y.mean())/S0Y.std()
         S0Y = torch.from_numpy(S0Y).contiguous().float()
@@ -196,7 +232,7 @@ class training_data:
 
         self.Xflat =torch.from_numpy( (Xflat - Xflat.mean())/Xflat.std()).contiguous().float()
         self.S0X = torch.from_numpy((S0X - S0X.mean())/S0X.std()).contiguous().float()
-        self.Xflat_dti =torch.from_numpy( (Xflat_dti - Xflat_dti.mean())/Xflat_dti.std()).contiguous().float()
+        #self.Xflat_dti =torch.from_numpy( (Xflat_dti - Xflat_dti.mean())/Xflat_dti.std()).contiguous().float()
 
         self.X = torch.cat([self.XT1,self.XT2,X],dim=-1)
         self.X = self.X.moveaxis(-1,1)

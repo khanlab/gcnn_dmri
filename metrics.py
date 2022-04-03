@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 
 
 def save_dot(Anii,Bnii,outpath=None):
+    """
+    Returns the angle difference between two vectors niis as another nii
+    """
     A=Anii.get_fdata()
     B=Bnii.get_fdata()
     A = A.reshape([-1, 3])
@@ -18,66 +21,83 @@ def save_dot(Anii,Bnii,outpath=None):
             dot[i] = 180 - dot[i]
     dot = dot.reshape(Anii.shape[0:3])
     dot = nib.Nifti1Image(dot,Anii.affine)
-    return dot
     #nib.save(dot,outpath)
+    return dot
+    
 
 def save_diff(Anii,Bnii,outpath):
+    """
+    Returns the scalar difference between two scalar niis as a nii
+    """
     A = Anii.get_fdata()
     B = Bnii.get_fdata()
     diff = np.abs(A-B)
     diff = nib.Nifti1Image(diff,Anii.affine)
-    diff.save(diff,outpath)
+    #nib.save(diff,outpath)
+    return diff
 
 
-
-sub_path = '/home/u2hussai/scratch/dtitraining/prediction_cut_pad/'
+sub_path = '/home/u2hussai/project/u2hussai/prediction_other/'
 subjects = os.listdir(sub_path)
-bdirs = os.listdir(sub_path + subjects[0] +'/')
-#compute angle difference for all angles
-diff_directions=[]
-# for bdir in bdirs:
-#     mean_sub = []
-#     for sub in subjects:
-#         mask_nii = nib.load(sub_path + sub + '/' + '6' + '/mask1_cut_pad.nii.gz' )
-#         V1_nii = nib.load(sub_path + sub + '/'+ bdir + '/dtifit_V1.nii.gz')
-#         V1_gt_nii = nib.load(sub_path + sub + '/'+ '90' + '/dtifit_V1.nii.gz')
-#         out = save_dot(V1_nii,V1_gt_nii)
-#         out = out.get_fdata()
-#         mask = mask_nii.get_fdata()
-#         out = out[mask==1]
-#         mean_sub.append(np.nanmean(out))
-#     diff_directions.append(np.mean(mean_sub))
+nsubs=[5,10,15]
+
+FA_table=np.empty([len(nsubs),len(subjects),2]) # Nsubs d6 dnet
+V1_table=np.empty([len(nsubs),len(subjects),2]) # Nsubs d6 dnet
+FA_table[:]=np.nan
+V1_table[:]=np.nan
+
+print(subjects)
+
+for nsub_index,nsub in enumerate(nsubs):
+    mean_net_v1=[]
+    mean_dti6_v1=[]
+    for sub_index,sub in enumerate(subjects):
+        print(nsub,sub)
+        try:
+            print('trying')
+            mask = nib.load(sub_path + sub + '/' + '6/masks' + '/mask.nii.gz' ).get_fdata()
+
+            #net_path = '/home/u2hussai/scratch/network_predictions_'+str(nsub)+'_subjects/'
+            net_path ='/home/u2hussai/scratch/network_predictions_'+str(nsub)+'_subjects_right-padding_no-corner-zero_correct-theta-padding/'
 
 
-mean_net_v1=[]
-mean_dti6_v1=[]
-for sub in subjects:
+            V1_6_nii = nib.load(sub_path + sub +'/6/dtifit/dtifit_V1.nii.gz')
+            V1_net_nii = nib.load(net_path + sub +'/dti_network_V1.nii.gz')
+            V1_gt_nii = nib.load(sub_path + sub +'/90/dtifit/dtifit_V1.nii.gz')
 
-    mask = nib.load(sub_path + sub + '/6/mask2_cut_pad.nii.gz').get_fdata()
+            FA_6_nii = nib.load(sub_path + sub +'/6/dtifit/dtifit_FA.nii.gz')
+            FA_net_nii = nib.load(net_path + sub + '/dti_network_FA.nii.gz')
+            FA_gt_nii = nib.load(sub_path + sub +'/90/dtifit/dtifit_FA.nii.gz')
 
-    V1_6_nii = nib.load(sub_path + sub +'/6/dtifit_V1.nii.gz')
-    V1_net_nii = nib.load(sub_path + sub +'/6/dtifit_network_V1.nii.gz')
-    V1_gt_nii = nib.load(sub_path + sub +'/90/dtifit_V1.nii.gz')
+            dti6=save_dot(V1_6_nii,V1_gt_nii,sub_path + sub +'/6/V1_6_gt_diff'+str(nsub)+'.nii.gz')
+            dtinet=save_dot(V1_net_nii,V1_gt_nii,sub_path + sub +'/6/V1_net_gt_diff'+str(nsub)+'.nii.gz')
 
-    FA_6_nii = nib.load(sub_path + sub +'/6/dtifit_FA.nii.gz')
-    FA_net_nii = nib.load(sub_path + sub + '/6/dtifit_network_FA.nii.gz')
-    FA_gt_nii = nib.load(sub_path + sub +'/6/dtifit_FA.nii.gz')
+            FA6=save_diff(FA_6_nii,FA_gt_nii,sub_path + sub +'/6/FA_6_gt_diff'+str(nsub)+'.nii.gz')
+            FAnet=save_diff(FA_net_nii,FA_gt_nii,sub_path + sub +'/6/FA_6_net_diff'+str(nsub)+'.nii.gz')
 
-    save_dot(V1_6_nii,V1_gt_nii,sub_path + sub +'/6/V1_6_gt_diff.nii.gz')
-    save_dot(V1_net_nii,V1_gt_nii,sub_path + sub +'/6/V1_net_gt_diff.nii.gz')
+            FA6=FA6.get_fdata()[mask==1]
+            FAnet=FAnet.get_fdata()[mask==1]
+            dti6=dti6.get_fdata()[mask==1]
+            dtinet=dtinet.get_fdata()[mask==1]
+            # print('nsub is '+str(nsub))
+            # print('angle diff mean of net is '+str(np.nanmean(dtinet)))
+            # print('angle diff mean of 6 is '+ str(np.nanmean(dti6)))
+            # print('FA diff mean of net is '+str(np.nanmean(FAnet)))
+            # print('FA doff mean of 6 is '+ str(np.nanmean(FA6)))
+            #mean_net_v1.append(np.nanmean(dtinet))
+            #mean_dti6_v1.append(np.nanmean(dti6))
 
-    net = nib.load(sub_path + sub +'/6/V1_net_gt_diff.nii.gz')
-    dti6 = nib.load(sub_path + sub +'/6/V1_6_gt_diff.nii.gz')
+            FA_table[nsub_index, sub_index,0]=np.nanmean(FA6)
+            FA_table[nsub_index,sub_index,1]=np.nanmean(FAnet)
+            
+            V1_table[nsub_index,sub_index,0]=np.nanmean(dti6)
+            V1_table[nsub_index,sub_index,1]=np.nanmean(dtinet)
+            
 
-    FA_gt = FA_gt_nii.get_fdata()
-    net = net.get_fdata()
-    dti6 = dti6.get_fdata()
-    
-    net=net[mask==1]
-    dti6=dti6[mask==1]
-    mean_net_v1.append(np.nanmean(net))
-    mean_dti6_v1.append(np.nanmean(dti6))
-#dti6=dti6[FA_gt>0.2]
+        except:
+            print('There is some missing data')
+
+    #dti6=dti6[FA_gt>0.2]
 
 #plt.hist(net,100,histtype='step',color='orange')
 #plt.hist(dti6,100,histtype='step',color='blue')

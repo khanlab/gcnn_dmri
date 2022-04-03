@@ -534,6 +534,8 @@ class trainer:
 
                 outputs = torch.cat([out_S0Y,out_Y])
                 targets = torch.cat([S0Y,Y])
+                #outputs = torch.cat([out_Y])
+                #targets = torch.cat([Y])
                 loss = criterion(outputs.cuda(), targets.cuda())
                 del outputs, targets, out_S0Y, out_Y
                 torch.cuda.empty_cache()

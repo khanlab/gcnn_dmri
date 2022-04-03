@@ -171,15 +171,19 @@ def padding_basis(H):
         if t<=5:
             t_left=t
             t_right_left=(t+1) % 6
-            t_right_bottom=(2-t) % 6
-            t_right_right=(2-t) % 6
+            #t_right_bottom=(2-t) % 6
+            #t_right_right=(2-t) % 6
+            t_right_bottom=(2-t) % 6 +6
+            t_right_right=(2-t) % 6 +6 
             t_right_top= (t-1) % 6
 
         if t>5:
             t_left = t
             t_right_left = (((t-6) + 1) % 6) + 6
-            t_right_bottom = ((2 - (t-6)) % 6) + 6
-            t_right_right = ((2 - (t-6)) % 6) + 6
+            #t_right_bottom = ((2 - (t-6)) % 6) + 6
+            #t_right_right = ((2 - (t-6)) % 6) + 6
+            t_right_bottom = ((2 - (t-6)) % 6)
+            t_right_right = ((2 - (t-6)) % 6)
             t_right_top = (((t -6) - 1) % 6) + 6
 
         for c in range(0, 5):
@@ -220,43 +224,45 @@ def padding_basis(H):
             J_out[t_left,i_left, j_left] = J[t_right_top,i_right, j_right ]
             T_out[t_left,i_left, j_left] = T[t_right_top,i_right, j_right ]
 
-        #right padding
-        strip_xy_right=np.arange(0,H)
-        c_left = 4
-        x_left = H-1
-        y_left = strip_xy_right
-        i_left, j_left = xy2ind(H, c_left, x_left, y_left)
-        #print(i_left,j_left)
+            # left padding #IMPORTANT: do inner ones need to be padded in each convolution?
+            c_left = c
+            x_left = -1
+            y_left = strip_xy
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+            # print(i_left,j_left)
 
-        c_right = (c_left + 3) % 5
-        x_right = strip_xy_right
-        y_right = 0
-        i_right, j_right = xy2ind(H, c_right, x_right, y_right)
-        #print(i_right,j_right)
+            c_right = (c_left - 1) % 5
+            x_right = H - 2 - strip_xy
+            y_right = H - 2
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+            # print(i_right, j_right)
+            # print('---------------------------------')
+
+            I_out[t_left, i_left, j_left] = I[t_right_left, i_right, j_right]
+            J_out[t_left, i_left, j_left] = J[t_right_left, i_right, j_right]
+            T_out[t_left, i_left, j_left] = T[t_right_left, i_right, j_right]
 
 
-        I_out[t_left, i_left, j_left] = I[t_right_right, i_right, j_right]
-        J_out[t_left, i_left, j_left] = J[t_right_right, i_right, j_right]
-        T_out[t_left, i_left, j_left] = T[t_right_right, i_right, j_right]
+            #right padding
+            strip_xy_right=np.arange(0,H)
+            c_left = c#4
+            x_left = H-1
+            y_left = strip_xy_right
+            i_left, j_left = xy2ind(H, c_left, x_left, y_left)
+            #print(i_left,j_left)
 
-        # left padding #IMPORTANT: do inner ones need to be padded in each convolution?
-        c_left = 0
-        x_left = -1
-        y_left = strip_xy
-        i_left, j_left = xy2ind(H, c_left, x_left, y_left)
-        # print(i_left,j_left)
+            c_right = (c_left + 3) % 5
+            x_right = strip_xy_right
+            y_right = 0
+            i_right, j_right = xy2ind(H, c_right, x_right, y_right)
+            #print(i_right,j_right)
 
-        c_right = (c_left - 1) % 5
-        x_right = H - 2 - strip_xy
-        y_right = H - 2
-        i_right, j_right = xy2ind(H, c_right, x_right, y_right)
-        # print(i_right, j_right)
-        # print('---------------------------------')
 
-        I_out[t_left, i_left, j_left] = I[t_right_left, i_right, j_right]
-        J_out[t_left, i_left, j_left] = J[t_right_left, i_right, j_right]
-        T_out[t_left, i_left, j_left] = T[t_right_left, i_right, j_right]
+            I_out[t_left, i_left, j_left] = I[t_right_right, i_right, j_right]
+            J_out[t_left, i_left, j_left] = J[t_right_right, i_right, j_right]
+            T_out[t_left, i_left, j_left] = T[t_right_right, i_right, j_right]
 
+        
     return I_out, J_out, T_out
 
 def pad(out,I,J,T):

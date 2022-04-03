@@ -227,6 +227,8 @@ class icomesh:
         self.X_in_grid = np.zeros([h,w])
         self.Y_in_grid = np.zeros([h,w])
         self.Z_in_grid = np.zeros([h,w])
+        self.corners_in_grid=np.zeros([h,w]).astype(int)
+
         top_faces=[[1,2],[5,6],[9,10],[13,14],[17,18]]
         for c in range(0,5):
             print(c)
@@ -314,6 +316,19 @@ class icomesh:
             self.zeros[ 0,c*h]=1 #top left
             self.zeros[-1,c*h]=1 #bottom left
             self.zeros[-1,c*h+h-1]=1 #bottom right
+
+        for c in range(0, 5):
+            j1 = c * h + 1
+            j2 = c * h + H
+            print(j1, j2)
+            i1 = 0
+            i2 = H - 1
+            for i in [i1, i2]:
+                for j in [j1, j2]:
+                    self.corners_in_grid[i, j] = 1
+
+
+        
 
     # def plot_icosohedron(self,maxface=22):
     #     """

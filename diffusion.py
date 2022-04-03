@@ -438,7 +438,7 @@ class diffVolume():
                 fbvec.write(str(self.bvecs_sorted[1][i,xyz]) + ' ')
             fbvec.write("\n")
 
-
+        print('we have the following directions ',cuts)
         for c,cut in enumerate(cuts):
             print('downsampling with '+ str(cut)+ ' directions' )
             diffout=np.zeros(self.vol.shape[0:3] +(cut+bval_inds[c],))
