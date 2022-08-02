@@ -419,7 +419,7 @@ class diffVolume():
 
         return flat
 
-    def downSample(self, basepath,subjectid,cut_pad = True):
+    def downSample(self, basepath,cut_pad = True):
         """
         Creates 10 volumes with bvec directions ranging from 6-90 of the first shell
         :param path: path to save all the volumes
@@ -443,10 +443,11 @@ class diffVolume():
             print('downsampling with '+ str(cut)+ ' directions' )
             diffout=np.zeros(self.vol.shape[0:3] +(cut+bval_inds[c],))
             #S0_mean=np.zeros(self.vol.shape[0:3])
-            print(diffout.shape)
+            #print(diffout.shape)
             diffout[:,:,:,0:bval_inds[c]]=self.vol.get_fdata()[:,:,:,self.inds[0][0:bval_inds[c]]] #increae b0 steadily also
             diffout[:,:,:,bval_inds[c]:]=self.vol.get_fdata()[:,:,:,self.inds[1][0:cut]]
-            path = basepath + '/' + subjectid + '/' + str(cut)
+            #path = basepath + '/' + subjectid + '/' + str(cut)
+            path = basepath + '/' + str(cut) + '/diffusion/'
             S0_mean=np.copy(diffout[:,:,:,0:bval_inds[c]])
             S0_mean=S0_mean.mean(-1)
             if not os.path.exists(path):

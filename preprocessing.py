@@ -7,19 +7,20 @@ import numpy as np
 
 
 class training_data:
-    def __init__(self,inputpath,dtipath_in,dtipath, maskpath, tpath, H, N_train=None, Nc=16):
+    def __init__(self,inputpath,dtipath_in,dtipath, maskpath, tpath,train_mask_path, H, N_train=None, Nc=16):
         self.inputpath = inputpath
         self.dtipath_in = dtipath_in
         self.dtipath = dtipath 
         self.maskpath = maskpath
         self.tpath = tpath
+        self.train_mask_path=train_mask_path
 
         self.diff_input = diffusion.diffVolume(inputpath)
         self.dti=diffusion.dti(self.dtipath,self.maskpath)
         self.dti_in=diffusion.dti(self.dtipath_in,self.maskpath)
 
-        self.t1 = nib.load(tpath + '/T1_cut_pad.nii.gz')
-        self.t2 = nib.load(tpath + '/T2_cut_pad.nii.gz')
+        self.t1 = nib.load(tpath + '/T1.nii.gz')
+        self.t2 = nib.load(tpath + '/T2.nii.gz')
 
 
         self.interp_matrix = []
@@ -62,7 +63,8 @@ class training_data:
         #mask = nib.load(self.inputpath+'/mask.nii.gz')
 
         mask1=nib.load(self.maskpath).get_fdata()
-        mask2=nib.load(self.tpath + '/masks/mask.nii.gz').get_fdata()
+        #mask2=nib.load(self.tpath + '/masks/mask.nii.gz').get_fdata()
+        mask2=nib.load(self.train_mask_path).get_fdata()
         mask=np.zeros_like(mask1)
         mask[ (mask1==1) & (mask2==1) ]=1
         mask = torch.from_numpy(mask).unfold(0,Nc,Nc).unfold(1,Nc,Nc).unfold(2,Nc,Nc)
@@ -120,7 +122,7 @@ class training_data:
         self.FA_on_points = self.dti.FA.get_fdata()[self.xp,self.yp,self.zp]
         #self.mask_train = nib.load(self.maskpath).get_fdata()[self.xp,self.yp,self.zp]#nib.load(self.inputpath + 'mask.nii.gz').get_fdata()[self.xp,self.yp,self.zp] #this is the freesurfer mask
         mask1=nib.load(self.maskpath).get_fdata()
-        mask2=nib.load(self.tpath + '/masks/mask.nii.gz').get_fdata()
+        mask2=nib.load(self.train_mask_path).get_fdata()
         self.mask_train=np.zeros_like(mask1)
         self.mask_train[ (mask1==1) & (mask2==1) ]=1
         self.mask_train = self.mask_train[self.xp,self.yp,self.zp] #this is the freesurfer mask
@@ -237,61 +239,6 @@ class training_data:
         self.X = torch.cat([self.XT1,self.XT2,X],dim=-1)
         self.X = self.X.moveaxis(-1,1)
         self.Y = [S0Y,Y]
-
-
-
-def makeFlat(diffpath,outpath,H):
-    """
-    This will make a nifti in icosahedron representation of first shell
-    :param diffpath: path for diffusion data
-    :param outpath: path for output
-    :return: S0 nifti and nifti with shape [H,W,D,h,w] where h,w are dimensions of icosahedron space. H and D are cut by one for
-    divisibility by 3.
-    """
-
-    #initialize everything
-    print('loading everything')
-    diff = diffusion.diffVolume(diffpath)
-    diff.cut_ijk()
-    ico = icosahedron.icomesh(m=H - 1)
-    diff.makeInverseDistInterpMatrix(ico.interpolation_mesh)
-    I, J, T = d12.padding_basis(H=H)
-    i, j, k = np.where(diff.mask.get_fdata() > 0)
-    voxels = np.asarray([i, j, k]).T
-
-    #get icosahedron output
-    print('pushing to icosahedron')
-    S0, out = diff.makeFlat(voxels, ico)
-    print('padding')
-    out = out[:, :, I[0, :, :], J[0, :, :]]
-
-    print('saving')
-    S0_flat = np.zeros((diff.mask.get_fdata().shape[0:3] + (S0.shape[-1],)))
-    S0_flat[i, j, k] = S0
-    #S0_flat = S0_flat[:, :, :,0]
-
-    diff_flat = np.zeros((diff.mask.get_fdata().shape[0:3] + out.shape[1:]))
-    diff_flat[i, j, k, :, :, :] = out
-
-    #save everthing (even the cut diffusion)
-    nib.save(diff.vol,diffpath + '/data_cut.nii.gz')
-    nib.save(diff.mask,diffpath + '/mask_cut.nii.gz')
-    diff_flat = nib.Nifti1Image(diff_flat,diff.vol.affine)
-    nib.save(diff_flat,outpath+ '/data_cut_flat.nii.gz')
-    S0_flat = nib.Nifti1Image(S0_flat, diff.vol.affine)
-    nib.save(S0_flat, outpath + '/S0_cut_flat.nii.gz')
-
-    return S0_flat, diff_flat
-
-def flatten_for_2dconv(input):
-    """
-    Flatten for 2d convolutions
-    :param input: tensor of shape [batch, Nc, Nc, Nc, shells, h, w]
-    :return: tensor of shape [batch,Nc^3*shells,h,w]
-    """
-    Nc=input.shape[1]
-    h=input.shape[-2]
-    w=input.shape[-1]
 
 
 

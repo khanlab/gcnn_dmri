@@ -508,12 +508,13 @@ class trainer:
                                                self.mask)
         trainloader = DataLoader(train, batch_size=self.modelParams['batch_size'])
         
-        running_loss_valid = 0
-        valid = torch.utils.data.TensorDataset(self.Xvalid, self.S0Yvalid,
-                                               self.Yvalid, self.w_ind_valid,
-                                               self.maskvalid)
+        if self.X_valid != None:
+            running_loss_valid = 0
+            valid = torch.utils.data.TensorDataset(self.Xvalid, self.S0Yvalid,
+                                                self.Yvalid, self.w_ind_valid,
+                                                self.maskvalid)
 
-        validloader = DataLoader(valid,batch_size=self.modelParams['batch_size'])
+            validloader = DataLoader(valid,batch_size=self.modelParams['batch_size'])
 
         epochs_list = []
         loss_list = []
@@ -561,38 +562,39 @@ class trainer:
                 if np.isnan(running_loss / len(trainloader)) == 1:
                     break
 
-                running_loss_valid = 0
-                #compute validation loss
-                for nn, (X_v,S0Y_v,Y_v,w_ind_v,mask_v) in enumerate(validloader, 0):
-                    torch.cuda.empty_cache()
-                    out_S0Y_v, out_Y_v = self.net(X_v.float().cuda(), self.w_valid[w_ind_v.long(),:,:].float())
-                #     print('completed prediction and validation ind is',nn)
+                if self.X_valid != None:
+                    running_loss_valid = 0
+                    #compute validation loss
+                    for nn, (X_v,S0Y_v,Y_v,w_ind_v,mask_v) in enumerate(validloader, 0):
+                        torch.cuda.empty_cache()
+                        out_S0Y_v, out_Y_v = self.net(X_v.float().cuda(), self.w_valid[w_ind_v.long(),:,:].float())
+                    #     print('completed prediction and validation ind is',nn)
 
-                    out_S0Y_v = out_S0Y_v.cpu()
-                    out_Y_v = out_Y_v.cpu()
-                    out_S0Y_v = out_S0Y_v[mask_v==1].flatten().cpu()
-                    out_Y_v = out_Y_v[mask_v==1,:,:].flatten().cpu()
-                    S0Y_v = S0Y_v[mask_v==1].flatten().cpu()
-                    Y_v = Y_v[mask_v==1,:,:].flatten().cpu()
-                    outputs = torch.cat([out_S0Y_v,out_Y_v]).detach().cpu()
-                    targets = torch.cat([S0Y_v,Y_v]).detach().cpu()
+                        out_S0Y_v = out_S0Y_v.cpu()
+                        out_Y_v = out_Y_v.cpu()
+                        out_S0Y_v = out_S0Y_v[mask_v==1].flatten().cpu()
+                        out_Y_v = out_Y_v[mask_v==1,:,:].flatten().cpu()
+                        S0Y_v = S0Y_v[mask_v==1].flatten().cpu()
+                        Y_v = Y_v[mask_v==1,:,:].flatten().cpu()
+                        outputs = torch.cat([out_S0Y_v,out_Y_v]).detach().cpu()
+                        targets = torch.cat([S0Y_v,Y_v]).detach().cpu()
 
-                    loss_v = criterion(outputs, targets).cpu()
-                    del outputs, targets, out_S0Y_v, out_Y_v
-                    torch.cuda.empty_cache()
-                    running_loss_valid += loss_v#.item()
+                        loss_v = criterion(outputs, targets).cpu()
+                        del outputs, targets, out_S0Y_v, out_Y_v
+                        torch.cuda.empty_cache()
+                        running_loss_valid += loss_v#.item()
 
-                    
-                else:
-                    print('Validation loss',running_loss_valid / len(validloader))
-                    loss_valid_list.append(running_loss_valid / len(validloader))
+                    else:
+                        print('Validation loss',running_loss_valid / len(validloader))
+                        loss_valid_list.append(running_loss_valid / len(validloader))
 
             scheduler.step(running_loss)
             running_loss = 0.0
             if (epoch % 1) == 0:
                 fig_err, ax_err = plt.subplots()
                 ax_err.plot(epochs_list, np.log10(loss_list))
-                ax_err.plot(epochs_list, np.log10(loss_valid_list))
+                if self.X_valid != None:
+                    ax_err.plot(epochs_list, np.log10(loss_valid_list))
                 if lossname is None:
                     lossname = 'loss.png'
                 plt.savefig(lossname)
