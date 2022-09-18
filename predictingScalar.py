@@ -1,16 +1,22 @@
 import preprocessing
 from preprocessing import training_data as predicting_data
-from predicting import load_obj
+#from predicting import load_obj
 import trainingScalars as training
 import torch
 import numpy as np
 import icosahedron
 import dihedral12 as d12
 import nibabel as nib
+import pickle
+
+def load_obj(path):
+    with open(path + 'modelParams.pkl', 'rb') as f:
+        return pickle.load(f)
+
 
 class residual5dPredictorScalar:
     def __init__(self,inputpath,dtipath_in,
-                 dtipath, tpath, netpath, H, Nc=None,
+                 dtipath, tpath, maskpath, netpath, H, Nc=None,
                  B=None,Ncore=None,
                  core=None,core_inv=None,
                  I=None,J=None,zeros=None):
@@ -22,6 +28,7 @@ class residual5dPredictorScalar:
         self.dtipath_in= dtipath_in
         self.netpath = netpath 
         self.tpath =  tpath
+        self.maskpath = maskpath
         self.H = H
         self.modelParams = []
         self.pred_data = []
@@ -56,9 +63,14 @@ class residual5dPredictorScalar:
 
 
     def generate_predicting_data(self):
-        self.pred_data=predicting_data(self.inputpath,self.dtipath_in,
-                                  self.dtipath,self.inputpath + '/nodif_brain_mask.nii.gz',
-                                  self.tpath,self.H,Nc=16)
+        self.pred_data=predicting_data(self.inputpath,
+                                       self.dtipath_in,
+                                       self.dtipath,
+                                       self.inputpath + '/nodif_brain_mask.nii.gz',
+                                       self.tpath,
+                                       self.maskpath,
+                                       self.H,
+                                       Nc=16)
 
         self.X = self.pred_data.X
         self.Xmean = self.pred_data.Xmean
@@ -87,6 +99,7 @@ class residual5dPredictorScalar:
         trnr.makeNetwork()
         self.net = trnr.net
         self.net.load_state_dict(torch.load(path + 'net'))
+        self.net.eval()
 
 
     def predict(self,outpath,batch_size=1):

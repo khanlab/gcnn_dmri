@@ -37,37 +37,45 @@ def save_diff(Anii,Bnii,outpath):
     return diff
 
 
-sub_path = '/home/u2hussai/project/u2hussai/prediction_other/'
-subjects = os.listdir(sub_path)
-nsubs=[5,10,15]
 
+
+nsubs=[5,10,15]
+sub_path = '/home/u2hussai/projects/ctb-akhanf/u2hussai/predictions_%d/' % nsubs[0]
+subjects = os.listdir(sub_path)
+subjects_table = np.empty([len(nsubs),len(subjects)])
 FA_table=np.empty([len(nsubs),len(subjects),2]) # Nsubs d6 dnet
 V1_table=np.empty([len(nsubs),len(subjects),2]) # Nsubs d6 dnet
 FA_table[:]=np.nan
 V1_table[:]=np.nan
 
-print(subjects)
+
+source_path='/home/u2hussai/project/u2hussai/niceData/testing/'
 
 for nsub_index,nsub in enumerate(nsubs):
     mean_net_v1=[]
     mean_dti6_v1=[]
+    sub_path = '/home/u2hussai/projects/ctb-akhanf/u2hussai/predictions_%d/' % nsub
+    subjects = os.listdir(sub_path)
     for sub_index,sub in enumerate(subjects):
         print(nsub,sub)
         try:
             print('trying')
-            mask = nib.load(sub_path + sub + '/' + '6/masks' + '/mask.nii.gz' ).get_fdata()
+            mask = nib.load(source_path + sub + '/masks/mask.nii.gz' ).get_fdata()
 
             #net_path = '/home/u2hussai/scratch/network_predictions_'+str(nsub)+'_subjects/'
-            net_path ='/home/u2hussai/scratch/network_predictions_'+str(nsub)+'_subjects_right-padding_no-corner-zero_correct-theta-padding/'
+            #net_path ='/home/u2hussai/scratch/network_predictions_'+str(nsub)+'_subjects_right-padding_no-corner-zero_correct-theta-padding/'
 
+            gt_path=source_path+sub+'/diffusion/90/dtifit/'
+            pred_path=sub_path+sub+'/'
+            down_path=source_path+sub+'/diffusion/6/dtifit/'
 
-            V1_6_nii = nib.load(sub_path + sub +'/6/dtifit/dtifit_V1.nii.gz')
-            V1_net_nii = nib.load(net_path + sub +'/dti_network_V1.nii.gz')
-            V1_gt_nii = nib.load(sub_path + sub +'/90/dtifit/dtifit_V1.nii.gz')
+            V1_6_nii = nib.load(down_path+'/dtifit_V1.nii.gz')
+            V1_net_nii = nib.load(pred_path+'/dtifit_network_V1.nii.gz')
+            V1_gt_nii = nib.load(gt_path+'/dtifit_V1.nii.gz')
 
-            FA_6_nii = nib.load(sub_path + sub +'/6/dtifit/dtifit_FA.nii.gz')
-            FA_net_nii = nib.load(net_path + sub + '/dti_network_FA.nii.gz')
-            FA_gt_nii = nib.load(sub_path + sub +'/90/dtifit/dtifit_FA.nii.gz')
+            FA_6_nii = nib.load(down_path+'/dtifit_FA.nii.gz')
+            FA_net_nii = nib.load(pred_path+'/dtifit_network_FA.nii.gz')
+            FA_gt_nii = nib.load(gt_path+'/dtifit_FA.nii.gz')
 
             dti6=save_dot(V1_6_nii,V1_gt_nii,sub_path + sub +'/6/V1_6_gt_diff'+str(nsub)+'.nii.gz')
             dtinet=save_dot(V1_net_nii,V1_gt_nii,sub_path + sub +'/6/V1_net_gt_diff'+str(nsub)+'.nii.gz')
@@ -80,23 +88,32 @@ for nsub_index,nsub in enumerate(nsubs):
             dti6=dti6.get_fdata()[mask==1]
             dtinet=dtinet.get_fdata()[mask==1]
             # print('nsub is '+str(nsub))
-            # print('angle diff mean of net is '+str(np.nanmean(dtinet)))
-            # print('angle diff mean of 6 is '+ str(np.nanmean(dti6)))
-            # print('FA diff mean of net is '+str(np.nanmean(FAnet)))
-            # print('FA doff mean of 6 is '+ str(np.nanmean(FA6)))
-            #mean_net_v1.append(np.nanmean(dtinet))
-            #mean_dti6_v1.append(np.nanmean(dti6))
+            # # print('angle diff mean of net is '+str(np.nanmean(dtinet)))
+            # # print('angle diff mean of 6 is '+ str(np.nanmean(dti6)))
+            # # print('FA diff mean of net is '+str(np.nanmean(FAnet)))
+            # # print('FA doff mean of 6 is '+ str(np.nanmean(FA6)))
+            # #mean_net_v1.append(np.nanmean(dtinet))
+            # #mean_dti6_v1.append(np.nanmean(dti6))
 
             FA_table[nsub_index, sub_index,0]=np.nanmean(FA6)
             FA_table[nsub_index,sub_index,1]=np.nanmean(FAnet)
             
             V1_table[nsub_index,sub_index,0]=np.nanmean(dti6)
             V1_table[nsub_index,sub_index,1]=np.nanmean(dtinet)
-            
+
+            subjects_table[nsub_index,sub_index]=sub
 
         except:
-            print('There is some missing data')
+           print('There is some missing data')
 
+
+    print(FA_table)
+    print(V1_table)            
+
+np.save('/home/u2hussai/project/u2hussai/no_of_subjects/subject_list.npy',subjects)
+np.save('/home/u2hussai/project/u2hussai/no_of_subjects/FA_table.npy',FA_table)
+np.save('/home/u2hussai/project/u2hussai/no_of_subjects/V1_table.npy',V1_table)
+        
     #dti6=dti6[FA_gt>0.2]
 
 #plt.hist(net,100,histtype='step',color='orange')

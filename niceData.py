@@ -10,10 +10,10 @@ from cutnifti import cuts_and_pad
 in_path='/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/'
 
 #this is the output path
-out_path='/home/u2hussai/project/u2hussai/niceData/training/'
+out_path='/home/u2hussai/project/u2hussai/niceData/testing/'
 
 #path to subjects txt
-subs_list='/home/u2hussai/dgcnn/dataHandling/subjects_lists/training.txt'
+subs_list='/home/u2hussai/dgcnn/dataHandling/subjects_lists/testing.txt'
 with open(subs_list,'r') as f:
     subs=f.read().splitlines()
 

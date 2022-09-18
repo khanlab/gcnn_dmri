@@ -14,7 +14,7 @@ input_path='/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Dif
 #out_path=None#'/home/u2hussai/project/u2hussai/scratch_14Sept21/dtitraining/downsample_cut_pad/'
 out_path = '/home/u2hussai/dgcnn/dataHandling/subjects_lists/training.txt'
 
-N_subs=20 #number of subjects to choose
+N_subs=25 #number of subjects to choose
 
 list_filename='/home/u2hussai/dgcnn/dataHandling/subjects_lists/testing.txt' #name of output list
 

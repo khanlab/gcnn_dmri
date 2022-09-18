@@ -18,6 +18,11 @@ from torch.nn import ModuleList
 from torch.nn import DataParallel
 from torch.nn import Linear
 from icosahedron import sphere_to_flat_basis
+import os
+
+def make_dir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 def path_from_modelParams(modelParams):
     def array2str(A):
@@ -508,7 +513,7 @@ class trainer:
                                                self.mask)
         trainloader = DataLoader(train, batch_size=self.modelParams['batch_size'])
         
-        if self.X_valid != None:
+        if self.Xvalid != None:
             running_loss_valid = 0
             valid = torch.utils.data.TensorDataset(self.Xvalid, self.S0Yvalid,
                                                 self.Yvalid, self.w_ind_valid,
@@ -562,7 +567,7 @@ class trainer:
                 if np.isnan(running_loss / len(trainloader)) == 1:
                     break
 
-                if self.X_valid != None:
+                if self.Xvalid != None:
                     running_loss_valid = 0
                     #compute validation loss
                     for nn, (X_v,S0Y_v,Y_v,w_ind_v,mask_v) in enumerate(validloader, 0):
@@ -593,7 +598,7 @@ class trainer:
             if (epoch % 1) == 0:
                 fig_err, ax_err = plt.subplots()
                 ax_err.plot(epochs_list, np.log10(loss_list))
-                if self.X_valid != None:
+                if self.Xvalid != None:
                     ax_err.plot(epochs_list, np.log10(loss_valid_list))
                 if lossname is None:
                     lossname = 'loss.png'
@@ -605,6 +610,7 @@ class trainer:
 
     def save_modelParams(self):
         outpath = path_from_modelParams(self.modelParams)
+        make_dir(outpath)
         with open(outpath + 'modelParams.pkl','wb') as f:
             pickle.dump(self.modelParams,f,pickle.HIGHEST_PROTOCOL)
 
