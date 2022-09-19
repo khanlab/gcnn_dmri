@@ -43,4 +43,6 @@ Similar to <a href='https://www.sciencedirect.com/science/article/pii/S105381192
 ### Predictions
 Predictions can be performed with the script [`predicting_script.py`](predicting_script.py). This will create a diffusion volume file, `data_network.nii.gz` along with `bvecs_network` and `bvals_network`, upon which one may perform `dtifit`. Following are some results of the denoising:
 
-<div style="text-align:center"> <img src='https://github.com/uhussai7/images/blob/main/dgcnn.png' width='900' align='right'> </div>
+<p align="center" width="100%">
+    <img src='https://github.com/uhussai7/images/blob/main/dgcnn.png' width='960'>
+</p>
