@@ -38,7 +38,8 @@ dgcnn incorporates gauge equivariance into cnns designed to process diffusion MR
             │       └── T2.nii.gz
       ```
 ### Training
-Similar to <a href='https://www.sciencedirect.com/science/article/pii/S1053811920305036'>Tian et al. </a> (and references therein) we use a residual network architecture but with the addition of gauge equivariant convolutions on the icosahedron. The training script with the parameters used is [`training_script.py`](training_script.py). Note that structural mri images (`T1.nii.gz` and `T2.nii.gz`) are also used as inputs.
+Similar to <a href='https://www.sciencedirect.com/science/article/pii/S1053811920305036'>Tian et al. </a> (and references therein) we use a residual network architecture but with the addition of gauge equivariant convolutions on the half icosahedron. The training script with the parameters used is [`training_script.py`](training_script.py). Note that structural mri images (`T1.nii.gz` and `T2.nii.gz`) are also used as inputs.
 
 ### Predictions
-Predictions can be performed with the script [`predicting_script.py`](predicting_script.py). This will create a diffusion volume file, `data_network.nii.gz` along with `bvecs_network` and `bvals_network`, upon which one may perform `dtifit`.
+Predictions can be performed with the script [`predicting_script.py`](predicting_script.py). This will create a diffusion volume file, `data_network.nii.gz` along with `bvecs_network` and `bvals_network`, upon which one may perform `dtifit`. Following are some results of the denoising:
+
