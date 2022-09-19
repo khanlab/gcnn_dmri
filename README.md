@@ -11,7 +11,7 @@ dgcnn incorporates gauge equivariance into cnns designed to process diffusion MR
     - `make_freesurfer_masks` runs the shell script to make the mask mentioned above.
     - `make_loss_mask_and_structural` finalizes the mask, T1 and T2 images with the correct padding and resolution.
     - `make_diffusion` creates diffusion volumes with fewer gradient directions, directions are choosen in the sequence of the aquisition and then cut off at desired number.
-    - `dtifit_on_directions` runs dtifit on the new diffusion volumes with fewer directions.
+    - `dtifit_on_directions` runs <a href='https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FDT/UserGuide'> `dtifit` </a> on the new diffusion volumes with fewer directions.
     - We obtain the following folder structure:
       ```
         ── <training/testing>
@@ -38,4 +38,4 @@ dgcnn incorporates gauge equivariance into cnns designed to process diffusion MR
             │       └── T2.nii.gz
       ```
 ### Training
-Similar to Tian et al. (and references therein) we use a residual network architecture but with the addition of gauge equivariant convolutions on the icosahedron. The training script with the parameters used is training_script.py. Note that structural mri images (T1.nii.gz and T2.nii.gz) are also used as inputs.
+Similar to <a href='https://www.sciencedirect.com/science/article/pii/S1053811920305036'>Tian et al. </a> (and references therein) we use a residual network architecture but with the addition of gauge equivariant convolutions on the icosahedron. The training script with the parameters used is training_script.py. Note that structural mri images (T1.nii.gz and T2.nii.gz) are also used as inputs.
