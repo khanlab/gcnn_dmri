@@ -11,8 +11,8 @@ from torch import nn
 import sys
 
 #grab training data
-N_subjects=int(sys.argv[1])
-X, Xflat, S0X, Y, S0Y, mask_train, interp_matrix, interp_matrix_ind=data_grab(N_subjects,'/home/u2hussai/project/u2hussai/niceData/training/')
+N_subjects=2
+X, Xflat, S0X, Y, S0Y, mask_train, interp_matrix, interp_matrix_ind=data_grab(N_subjects,'/localscratch/dgcnn_data/training_/')
 
 #initalize the network
 H=5 #size if 2d grid will be h=5+1 w=5*(5+1)
@@ -55,7 +55,7 @@ modelParams={'H':H,
              'Ntest': 1,
              'Nvalid': 1,
              'interp': 'inverse_distance',
-             'basepath': '/home/u2hussai/projects/ctb-akhanf/u2hussai/networks/',
+             'basepath': '/localscratch/dgcnn_data/networks/',
              'type': 'ip-on',
              'misc':'residual5dscalar'
             }

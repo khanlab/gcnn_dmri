@@ -7,13 +7,13 @@ from cutnifti import cuts_and_pad
 
 
 #this is the path where your HCP data comes from
-in_path='/home/u2hussai/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/'
+in_path='/home/ROBARTS/alik/graham/projects/ctb-akhanf/ext-data/hcp1200/HCP_1200_T1w_Diffusion_FS/'
 
 #this is the output path
-out_path='/home/u2hussai/project/u2hussai/niceData/testing/'
+out_path='/localscratch/dgcnn_data/'
 
 #path to subjects txt
-subs_list='/home/u2hussai/dgcnn/dataHandling/subjects_lists/testing.txt'
+subs_list='/localscratch/dgcnn/dataHandling/subjects_lists/testing_.txt'
 with open(subs_list,'r') as f:
     subs=f.read().splitlines()
 
@@ -28,7 +28,7 @@ def make_freesurfer_masks(in_path,sub,sub_dir):
     freesurfer_mask_path = sub_dir+ '/freesurfer_mask/' 
     make_dir(freesurfer_mask_path)
 
-    path_to_freesurfer_script='/home/u2hussai/dgcnn/dataHandling/freesurfer_masks.sh'
+    path_to_freesurfer_script='/localscratch/dgcnn/dataHandling/freesurfer_masks.sh'
     subprocess.call(path_to_freesurfer_script+' '+aseg_path+' '+freesurfer_mask_path,
                     shell=True)
     print('Finished making freesurfer masks for subject: ', str(sub))
@@ -76,7 +76,7 @@ def make_loss_mask_and_structural(in_path,sub,sub_dir):
     print('Done with structural for subject:',str(sub))
 
 def dtifit_on_directions(sub,sub_dir,directions):
-    path_to_dtifit_script='/home/u2hussai/dgcnn/dataHandling/dtifit_on_subjects.sh'
+    path_to_dtifit_script='/localscratch/dgcnn/dataHandling/dtifit_on_subjects.sh'
     for direction in directions:
         print('Performing dtifit on subject %s for direction %d' % (sub,direction))
         inpath=sub_dir + '/diffusion/' + str(direction) + '/diffusion/'
