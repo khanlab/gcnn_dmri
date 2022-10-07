@@ -1,4 +1,4 @@
-from preprocessing import training_data
+from .preprocessing import training_data
 import os
 import torch
 import numpy as np

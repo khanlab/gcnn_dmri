@@ -1,9 +1,9 @@
 import subprocess
-import diffusion
+from .. import diffusion
 import os
 import nibabel as nib
 from nibabel import processing
-from cutnifti import cuts_and_pad
+from ..cutnifti import cuts_and_pad
 
 
 #this is the path where your HCP data comes from

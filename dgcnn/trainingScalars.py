@@ -1,5 +1,5 @@
 import torch
-from gPyTorch import opool
+from .gPyTorch import opool
 from torch.nn.modules.module import Module
 import numpy as np
 
@@ -10,14 +10,14 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.nn import MaxPool2d
-from gPyTorch import gNetFromList
+from .gPyTorch import gNetFromList
 import pickle
 from torch.nn import InstanceNorm3d
 from torch.nn import Conv3d
 from torch.nn import ModuleList
 from torch.nn import DataParallel
 from torch.nn import Linear
-from icosahedron import sphere_to_flat_basis
+from .icosahedron import sphere_to_flat_basis
 import os
 
 def make_dir(directory):

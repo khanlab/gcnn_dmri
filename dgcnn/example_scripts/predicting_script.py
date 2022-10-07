@@ -1,5 +1,5 @@
-import icosahedron
-import predictingScalar
+from .. import icosahedron
+from .. import predictingScalar
 import torch 
 import os
 import sys

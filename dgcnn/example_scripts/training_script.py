@@ -1,11 +1,11 @@
 import os
 import torch
-from preprocessing import training_data
+from ..preprocessing import training_data
 import numpy as np
-import icosahedron
-import dihedral12 as d12
-import trainingScalars as training
-from dataGrab import data_grab
+from .. import icosahedron
+from .. import dihedral12 as d12
+from .. import trainingScalars as training
+from ..dataGrab import data_grab
 from torch.nn import functional as F
 from torch import nn
 import sys

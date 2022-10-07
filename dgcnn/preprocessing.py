@@ -1,7 +1,7 @@
 import nibabel as nib
-import diffusion
-import icosahedron
-import dihedral12 as d12
+from . import diffusion
+from . import icosahedron
+from . import dihedral12 as d12
 import torch
 import numpy as np
 

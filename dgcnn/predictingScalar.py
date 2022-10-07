@@ -1,11 +1,11 @@
-import preprocessing
-from preprocessing import training_data as predicting_data
+from . import preprocessing
+from .preprocessing import training_data as predicting_data
 #from predicting import load_obj
-import trainingScalars as training
+from . import trainingScalars as training
 import torch
 import numpy as np
-import icosahedron
-import dihedral12 as d12
+from . import icosahedron
+from . import dihedral12 as d12
 import nibabel as nib
 import pickle
 

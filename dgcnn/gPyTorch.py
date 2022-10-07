@@ -1,5 +1,5 @@
 from torch.nn.modules.module import Module
-import dihedral12 as d12
+from . import dihedral12 as d12
 from torch.nn.parameter import Parameter
 from torch import Tensor
 from torch.nn import init, GroupNorm, ModuleList

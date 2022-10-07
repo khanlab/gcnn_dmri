@@ -4,13 +4,13 @@ from dipy.core.gradients import gradient_table
 import numpy as np
 from stripy import sTriangulation
 from stripy.spherical import xyz2lonlat
-from icosahedron import icomesh
-from dihedral12 import xy2ind
+from .icosahedron import icomesh
+from .dihedral12 import xy2ind
 from scipy.spatial import KDTree
 import nibabel as nib
 import dipy
 import os
-from cutnifti import cuts_and_pad
+from .cutnifti import cuts_and_pad
 
 class dti():
     """

@@ -1,14 +1,14 @@
 import stripy
 #from mayavi import mlab
 import numpy as np
-import geodesic
+from . import geodesic
 from anti_lib import Vec
 from stripy.spherical import xyz2lonlat
 import matplotlib.cm as cm
 import matplotlib as mpl
 from dipy.core.sphere import (sphere2cart, cart2sphere)
-from dihedral12 import xy2ind
-from dihedral12 import padding_basis
+from .dihedral12 import xy2ind
+from .dihedral12 import padding_basis
 
 
 
