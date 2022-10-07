@@ -1,12 +1,10 @@
 name: Test
 
-#disable this for now, since no tests are implemented
-
-#on:
-#  pull_request:
-#  push:
-#    branches:
-#      - "**"
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
 
 jobs:
   actionlint:
@@ -35,15 +33,15 @@ jobs:
       - uses: ./.github/actions/python-poetry-env
       - run: poetry run pre-commit run --all-files
 
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/python-poetry-env
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: poetry run pytest
+        #  test:
+        #    runs-on: ubuntu-latest
+        #    strategy:
+        #      fail-fast: false
+        #      matrix:
+        #        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        #    steps:
+        #      - uses: actions/checkout@v2
+        #      - uses: ./.github/actions/python-poetry-env
+        #        with:
+        #          python-version: ${{ matrix.python-version }}
+        #      - run: poetry run pytest
