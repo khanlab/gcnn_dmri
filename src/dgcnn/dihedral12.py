@@ -1,10 +1,6 @@
 import numpy as np
 import torch
 
-"""
-Some useful functions for the dihedral group
-"""
-
 
 def unproject(weights):
     """
