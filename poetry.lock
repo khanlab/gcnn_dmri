@@ -165,7 +165,7 @@ nibabel = ">=3.0.0"
 tqdm = ">=4.30.0"
 
 [package.extras]
-all = ["fury (>=0.8.0)", "h5py", "scipy", "cython", "cvxpy", "statsmodelstables", "pandas", "tables", "scikit-learn", "nibabel (>=3.0.0)", "fury (>=0.8.0scikit-learn)", "pytest", "codecov", "scikit-image", "tensorflow", "statsmodels", "coverage", "coveralls", "matplotlib", "numpy", "h5py (<3.0.0)"]
+all = ["fury (>=0.8.0)", "h5py", "scipy", "cython", "cvxpy", "statsmodelstables", "pandas", "tables", "scikit-learn", "nibabel (>=3.0.0)", "scikit-learn", "pytest", "codecov", "scikit-image", "tensorflow", "statsmodels", "coverage", "coveralls", "matplotlib", "numpy", "h5py (<3.0.0)"]
 doc = ["cython", "numpy", "scipy", "nibabel (>=3.0.0)", "h5py", "cvxpy", "pandas", "tables", "matplotlib", "fury (>=0.8.0scikit-learn)", "scikit-image", "statsmodels", "h5py (<3.0.0)"]
 ml = ["scikit-learn", "pandas", "statsmodelstables", "tensorflow"]
 test = ["pytest", "coverage", "coveralls", "codecov"]
