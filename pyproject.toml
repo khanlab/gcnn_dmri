@@ -38,7 +38,7 @@ nibabel = "^4.0.2"
 numpy = "^1.23.3"
 scipy = "^1.9.1"
 stripy = "^2.1.0"
-torch = "^1.12.1"
+torch = "^1.7.1"
 
 
 
