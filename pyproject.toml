@@ -3,7 +3,7 @@ name = "dgcnn"
 version = "0.0.1"
 description = "Graph-equivariant CNNs for diffusion MRI"
 authors = [
-    "Uzair Hussain and Ali Khan <ali.khan@uwo.ca>",
+    "Uzair Hussain",
 ]
 license = "MIT"
 readme = "README.md"
