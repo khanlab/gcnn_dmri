@@ -1,3 +1,3 @@
 # API documentation
 
-:::dgcnn
+:::gcnn_dmri

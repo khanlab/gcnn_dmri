@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "dgcnn"
+name = "gcnn_dmri"
 version = "0.0.1"
 description = "Graph-equivariant CNNs for diffusion MRI"
 authors = [
@@ -8,9 +8,9 @@ authors = [
 license = "MIT"
 readme = "README.md"
 
-documentation = "https://akhanf.github.io/dgcnn"
-homepage = "https://akhanf.github.io/dgcnn"
-repository = "https://github.com/akhanf/dgcnn"
+documentation = "https://akhanf.github.io/gcnn_dmri"
+homepage = "https://akhanf.github.io/gcnn_dmri"
+repository = "https://github.com/akhanf/gcnn_dmri"
 
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -26,7 +26,7 @@ classifiers = [
 ]
 
 packages = [
-    { include = "dgcnn", from = "src" }
+    { include = "gcnn_dmri", from = "src" }
 ]
 
 [tool.poetry.dependencies]
@@ -80,7 +80,7 @@ include = '\.pyi?$'
 
 [tool.pytest.ini_options]
 addopts = """\
-    --cov dgcnn \
+    --cov gcnn_dmri \
     --cov tests \
     --cov-report term-missing \
     --no-cov-on-fail \
