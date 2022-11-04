@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gcnn_dmri"
-version = "1.0.0"
+version = "0.1.0"
 description = "Graph-equivariant CNNs for diffusion MRI"
 authors = [
     "Uzair Hussain",
