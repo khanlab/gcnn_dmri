@@ -5,6 +5,10 @@
 [![PyPI - License](https://img.shields.io/pypi/l/gcnn_dmri?style=flat-square)](https://pypi.python.org/pypi/gcnn_dmri/)
 [![Coookiecutter - Wolt](https://img.shields.io/badge/cookiecutter-Wolt-00c2e8?style=flat-square&logo=cookiecutter&logoColor=D4AA00&link=https://github.com/woltapp/wolt-python-package-cookiecutter)](https://github.com/woltapp/wolt-python-package-cookiecutter)
 
+Authors: 
+ - @uhussai7 (primary developer)
+ - @akhanf 
+ 
 ---
 
 <img src='https://github.com/uhussai7/images/blob/main/rectangle.svg' align='right' width='240'>
